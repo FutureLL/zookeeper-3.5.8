@@ -42,12 +42,11 @@ import org.slf4j.LoggerFactory;
  * period. Sessions are thus expired in batches made up of sessions that expire
  * in a given interval.
  */
-public class SessionTrackerImpl extends ZooKeeperCriticalThread implements
-        SessionTracker {
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+
     private static final Logger LOG = LoggerFactory.getLogger(SessionTrackerImpl.class);
 
-    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById =
-        new ConcurrentHashMap<Long, SessionImpl>();
+    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<Long, SessionImpl>();
 
     private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
 

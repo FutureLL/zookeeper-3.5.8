@@ -61,34 +61,40 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     }
     
     /**
+     * 传输数据
+     *
      * @return true if a packet was received
      * @throws InterruptedException
      * @throws IOException
      */
-    void doIO(List<Packet> pendingQueue, ClientCnxn cnxn)
-      throws InterruptedException, IOException {
+    void doIO(List<Packet> pendingQueue, ClientCnxn cnxn) throws InterruptedException, IOException {
+
         SocketChannel sock = (SocketChannel) sockKey.channel();
         if (sock == null) {
             throw new IOException("Socket is null!");
         }
+
+        // 读数据,就绪 --- 从服务端读
         if (sockKey.isReadable()) {
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
-                throw new EndOfStreamException(
-                        "Unable to read additional data from server sessionid 0x"
-                                + Long.toHexString(sessionId)
-                                + ", likely server has closed socket");
+                throw new EndOfStreamException("Unable to read additional data from server sessionid 0x" + Long.toHexString(sessionId) + ", likely server has closed socket");
             }
             if (!incomingBuffer.hasRemaining()) {
                 incomingBuffer.flip();
                 if (incomingBuffer == lenBuffer) {
                     recvCount.getAndIncrement();
                     readLength();
-                } else if (!initialized) {
+                }
+                // 连接有没有初始化
+                else if (!initialized) {
+                    /**
+                     * 读取连接的结果
+                     * @see ClientCnxn.SendThread#primeConnection()
+                     */
                     readConnectResult();
                     enableRead();
-                    if (findSendablePacket(outgoingQueue,
-                            sendThread.tunnelAuthInProgress()) != null) {
+                    if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
                         // Since SASL authentication has completed (if client is configured to do so),
                         // outgoing packets waiting in the outgoingQueue can now be sent.
                         enableWrite();
@@ -96,8 +102,14 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
                     updateLastHeard();
+                    // 初始化好了,结果变更为 true
                     initialized = true;
                 } else {
+                    /**
+                     * ************
+                     * ** 读取响应 **
+                     * ************
+                     */
                     sendThread.readResponse(incomingBuffer);
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
@@ -105,9 +117,11 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 }
             }
         }
+
+        // 写数据,就绪 --- 写到服务端
         if (sockKey.isWritable()) {
-            Packet p = findSendablePacket(outgoingQueue,
-                    sendThread.tunnelAuthInProgress());
+            // 获取被写的数据,从 outgoingQueue 中获取
+            Packet p = findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress());
 
             if (p != null) {
                 updateLastSend();
@@ -120,14 +134,20 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     }
                     p.createBB();
                 }
+
+                // 写数据,写到 Buffer 中
+                // 发送服务端【命令操作告诉服务端】
                 sock.write(p.bb);
+
+                // p 中的数据都被发送,无剩余
                 if (!p.bb.hasRemaining()) {
+                    // 发送次数++
                     sentCount.getAndIncrement();
+                    // 移除队列头
                     outgoingQueue.removeFirstOccurrence(p);
-                    if (p.requestHeader != null
-                            && p.requestHeader.getType() != OpCode.ping
-                            && p.requestHeader.getType() != OpCode.auth) {
+                    if (p.requestHeader != null && p.requestHeader.getType() != OpCode.ping && p.requestHeader.getType() != OpCode.auth) {
                         synchronized (pendingQueue) {
+                            // 存放服务器返回结果的 Package
                             pendingQueue.add(p);
                         }
                     }
@@ -158,12 +178,20 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
     }
 
-    private Packet findSendablePacket(LinkedBlockingDeque<Packet> outgoingQueue,
-                                      boolean tunneledAuthInProgres) {
+    /**
+     * 获取被写的数据,从 outgoingQueue 中获取
+     *
+     * @param outgoingQueue
+     * @param tunneledAuthInProgres
+     * @return
+     */
+    private Packet findSendablePacket(LinkedBlockingDeque<Packet> outgoingQueue, boolean tunneledAuthInProgres) {
+
         if (outgoingQueue.isEmpty()) {
             return null;
         }
         // If we've already starting sending the first packet, we better finish
+        // 取出第一个
         if (outgoingQueue.getFirst().bb != null || !tunneledAuthInProgres) {
             return outgoingQueue.getFirst();
         }
@@ -269,10 +297,13 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
      * @param addr the address of remote host
      * @throws IOException
      */
-    void registerAndConnect(SocketChannel sock, InetSocketAddress addr) 
-    throws IOException {
+    void registerAndConnect(SocketChannel sock, InetSocketAddress addr) throws IOException {
+
+        // 注册连接事件
         sockKey = sock.register(selector, SelectionKey.OP_CONNECT);
+        // 连接
         boolean immediateConnect = sock.connect(addr);
+        // 立刻连接成功 immediateConnect = true
         if (immediateConnect) {
             sendThread.primeConnection();
         }
@@ -280,8 +311,10 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     
     @Override
     void connect(InetSocketAddress addr) throws IOException {
+        // 创建一个 Socket 也就是 channel 通道
         SocketChannel sock = createSock();
         try {
+            // 注册与连接
            registerAndConnect(sock, addr);
       } catch (IOException e) {
             LOG.error("Unable to open socket to " + addr);
@@ -340,8 +373,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     }
     
     @Override
-    void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn)
-            throws IOException, InterruptedException {
+    void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException {
+
         selector.select(waitTimeOut);
         Set<SelectionKey> selected;
         synchronized (this) {
@@ -357,15 +390,22 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 if (sc.finishConnect()) {
                     updateLastSendAndHeard();
                     updateSocketAddresses();
+                    /**
+                     * 可能由于网络、服务端等因素影响,可能不会立即连接成功
+                     * 因此这里判断是否连接成功,如果连接成功,则再次调用这个方法
+                     * @see ClientCnxnSocketNIO#registerAndConnect(java.nio.channels.SocketChannel, java.net.InetSocketAddress)
+                     */
                     sendThread.primeConnection();
                 }
-            } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+            }
+            // 连接成功 & (可以读数据 | 可以写数据)
+            else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                // 传输数据
                 doIO(pendingQueue, cnxn);
             }
         }
         if (sendThread.getZkState().isConnected()) {
-            if (findSendablePacket(outgoingQueue,
-                    sendThread.tunnelAuthInProgress()) != null) {
+            if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
                 enableWrite();
             }
         }

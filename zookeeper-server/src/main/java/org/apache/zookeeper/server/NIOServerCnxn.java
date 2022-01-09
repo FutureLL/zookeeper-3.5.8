@@ -153,31 +153,42 @@ public class NIOServerCnxn extends ServerCnxn {
      */
     public void sendBuffer(ByteBuffer bb) {
         if (LOG.isTraceEnabled()) {
-            LOG.trace("Add a buffer to outgoingBuffers, sk " + sk
-                      + " is valid: " + sk.isValid());
+            LOG.trace("Add a buffer to outgoingBuffers, sk " + sk + " is valid: " + sk.isValid());
         }
         outgoingBuffers.add(bb);
         requestInterestOpsUpdate();
     }
 
-    /** Read the request payload (everything following the length prefix) */
+    /**
+     * Read the request payload (everything following the length prefix)
+     *
+     * @throws IOException
+     * @throws InterruptedException
+     */
     private void readPayload() throws IOException, InterruptedException {
-        if (incomingBuffer.remaining() != 0) { // have we read length bytes?
-            int rc = sock.read(incomingBuffer); // sock is non-blocking, so ok
+        // have we read length bytes?
+        if (incomingBuffer.remaining() != 0) {
+            // sock is non-blocking, so ok
+            int rc = sock.read(incomingBuffer);
             if (rc < 0) {
-                throw new EndOfStreamException(
-                        "Unable to read additional data from client sessionid 0x"
-                        + Long.toHexString(sessionId)
-                        + ", likely client has closed socket");
+                throw new EndOfStreamException("Unable to read additional data from client sessionid 0x" + Long.toHexString(sessionId) + ", likely client has closed socket");
             }
         }
 
-        if (incomingBuffer.remaining() == 0) { // have we read length bytes?
+        // have we read length bytes?
+        if (incomingBuffer.remaining() == 0) {
+            // 计数
             packetReceived();
             incomingBuffer.flip();
+            // 初始化
             if (!initialized) {
+                // 连接读取请求
                 readConnectRequest();
             } else {
+                /**
+                 * 读取请求
+                 * @see ZooKeeperServer#processPacket(org.apache.zookeeper.server.ServerCnxn, java.nio.ByteBuffer)
+                 */
                 readRequest();
             }
             lenBuffer.clear();
@@ -312,22 +323,19 @@ public class NIOServerCnxn extends ServerCnxn {
     void doIO(SelectionKey k) throws InterruptedException {
         try {
             if (isSocketOpen() == false) {
-                LOG.warn("trying to do i/o on a null socket for session:0x"
-                         + Long.toHexString(sessionId));
+                LOG.warn("trying to do i/o on a null socket for session:0x" + Long.toHexString(sessionId));
 
                 return;
             }
             if (k.isReadable()) {
                 int rc = sock.read(incomingBuffer);
                 if (rc < 0) {
-                    throw new EndOfStreamException(
-                            "Unable to read additional data from client sessionid 0x"
-                            + Long.toHexString(sessionId)
-                            + ", likely client has closed socket");
+                    throw new EndOfStreamException("Unable to read additional data from client sessionid 0x" + Long.toHexString(sessionId) + ", likely client has closed socket");
                 }
                 if (incomingBuffer.remaining() == 0) {
                     boolean isPayload;
-                    if (incomingBuffer == lenBuffer) { // start of next request
+                    // start of next request
+                    if (incomingBuffer == lenBuffer) {
                         incomingBuffer.flip();
                         isPayload = readLength(k);
                         incomingBuffer.clear();
@@ -335,7 +343,9 @@ public class NIOServerCnxn extends ServerCnxn {
                         // continuation
                         isPayload = true;
                     }
-                    if (isPayload) { // not the case for 4letterword
+                    // not the case for 4letterword
+                    if (isPayload) {
+                        // 读取请求
                         readPayload();
                     }
                     else {
@@ -353,8 +363,7 @@ public class NIOServerCnxn extends ServerCnxn {
                 }
             }
         } catch (CancelledKeyException e) {
-            LOG.warn("CancelledKeyException causing close of session 0x"
-                     + Long.toHexString(sessionId));
+            LOG.warn("CancelledKeyException causing close of session 0x" + Long.toHexString(sessionId));
             if (LOG.isDebugEnabled()) {
                 LOG.debug("CancelledKeyException stack trace", e);
             }
@@ -367,8 +376,7 @@ public class NIOServerCnxn extends ServerCnxn {
             // expecting close to log session closure
             close();
         } catch (IOException e) {
-            LOG.warn("Exception causing close of session 0x"
-                     + Long.toHexString(sessionId) + ": " + e.getMessage());
+            LOG.warn("Exception causing close of session 0x" + Long.toHexString(sessionId) + ": " + e.getMessage());
             if (LOG.isDebugEnabled()) {
                 LOG.debug("IOException stack trace", e);
             }
@@ -376,7 +384,13 @@ public class NIOServerCnxn extends ServerCnxn {
         }
     }
 
+    /**
+     * 读取请求
+     *
+     * @throws IOException
+     */
     private void readRequest() throws IOException {
+        // 处理 package
         zkServer.processPacket(this, incomingBuffer);
     }
 
@@ -687,11 +701,12 @@ public class NIOServerCnxn extends ServerCnxn {
     @Override
     public void sendResponse(ReplyHeader h, Record r, String tag) {
         try {
+            // 发送响应
             super.sendResponse(h, r, tag);
             if (h.getXid() > 0) {
                 // check throttling
-                if (outstandingRequests.decrementAndGet() < 1 ||
-                    zkServer.getInProcess() < outstandingLimit) {
+                if (outstandingRequests.decrementAndGet() < 1
+                        || zkServer.getInProcess() < outstandingLimit) {
                     enableRecv();
                 }
             }
@@ -718,6 +733,10 @@ public class NIOServerCnxn extends ServerCnxn {
         // Convert WatchedEvent to a type that can be sent over the wire
         WatcherEvent e = event.getWrapper();
 
+        /**
+         * 发送响应
+         * @see NIOServerCnxn#sendResponse(org.apache.zookeeper.proto.ReplyHeader, org.apache.jute.Record, java.lang.String)
+         */
         sendResponse(h, e, "notification");
     }
 

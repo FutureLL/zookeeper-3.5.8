@@ -72,13 +72,16 @@ public class QuorumPeerMain {
     protected QuorumPeer quorumPeer;
 
     /**
-     * To start the replicated server specify the configuration file name on
-     * the command line.
+     * 集群模式
+     * TODO 服务端启动 zkServer.sh start
+     *
+     * To start the replicated server specify the configuration file name on the command line.
      * @param args path to the configfile
      */
     public static void main(String[] args) {
         QuorumPeerMain main = new QuorumPeerMain();
         try {
+            // 运行并初始化
             main.initializeAndRun(args);
         } catch (IllegalArgumentException e) {
             LOG.error("Invalid arguments, exiting abnormally", e);
@@ -105,11 +108,19 @@ public class QuorumPeerMain {
         System.exit(0);
     }
 
-    protected void initializeAndRun(String[] args)
-        throws ConfigException, IOException, AdminServerException
-    {
+    /**
+     * 运行并初始化
+     *
+     * @param args
+     * @throws ConfigException
+     * @throws IOException
+     * @throws AdminServerException
+     */
+    protected void initializeAndRun(String[] args) throws ConfigException, IOException, AdminServerException {
+        // 配置类,也就是 zoo.cfg 中的属性配置
         QuorumPeerConfig config = new QuorumPeerConfig();
         if (args.length == 1) {
+            // 解析文件
             config.parse(args[0]);
         }
 
@@ -119,19 +130,26 @@ public class QuorumPeerMain {
                 .getSnapRetainCount(), config.getPurgeInterval());
         purgeMgr.start();
 
+        // 集群模式【server.1=localhost:2887:3887 ... 配置了集群】
+        // server.1: 代表第几台服务
+        // localhost: 代表服务器的 IP 地址
+        // 2887: 端口用来集群成员的信息交换,是服务器与集群中 leader 服务器交换信息的端口
+        // 3887: 端口是在 leader 挂掉的时候用来进行选举 leader 所用
         if (args.length == 1 && config.isDistributed()) {
             runFromConfig(config);
-        } else {
-            LOG.warn("Either no config or no quorum defined in config, running "
-                    + " in standalone mode");
-            // there is only server in the quorum -- run as standalone
+        }
+        // 单机模式
+        else {
+            LOG.warn("Either no config or no quorum defined in config, running " + " in standalone mode");
+            /**
+             * there is only server in the quorum -- run as standalone
+             * @see ZooKeeperServerMain#main(java.lang.String[])
+             */
             ZooKeeperServerMain.main(args);
         }
     }
 
-    public void runFromConfig(QuorumPeerConfig config)
-            throws IOException, AdminServerException
-    {
+    public void runFromConfig(QuorumPeerConfig config) throws IOException, AdminServerException {
       try {
           ManagedUtil.registerLog4jMBeans();
       } catch (JMException e) {
@@ -143,27 +161,26 @@ public class QuorumPeerMain {
           ServerCnxnFactory cnxnFactory = null;
           ServerCnxnFactory secureCnxnFactory = null;
 
+          /**
+           * 建立连接,接收客户端请求
+           * 获取建立 Socket 工厂,工厂方法模式
+           * 默认 NIOServerCnxnFactory
+           */
+          // 客户端的 host 请求,不配置的话可以接受任意发向 2181 的请求
           if (config.getClientPortAddress() != null) {
               cnxnFactory = ServerCnxnFactory.createFactory();
-              cnxnFactory.configure(config.getClientPortAddress(),
-                      config.getMaxClientCnxns(),
-                      false);
+              cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), false);
           }
-
+          // SSL 安全 host
           if (config.getSecureClientPortAddress() != null) {
               secureCnxnFactory = ServerCnxnFactory.createFactory();
-              secureCnxnFactory.configure(config.getSecureClientPortAddress(),
-                      config.getMaxClientCnxns(),
-                      true);
+              secureCnxnFactory.configure(config.getSecureClientPortAddress(), config.getMaxClientCnxns(), true);
           }
 
           quorumPeer = getQuorumPeer();
-          quorumPeer.setTxnFactory(new FileTxnSnapLog(
-                      config.getDataLogDir(),
-                      config.getDataDir()));
+          quorumPeer.setTxnFactory(new FileTxnSnapLog(config.getDataLogDir(), config.getDataDir()));
           quorumPeer.enableLocalSessions(config.areLocalSessionsEnabled());
-          quorumPeer.enableLocalSessionsUpgrading(
-              config.isLocalSessionsUpgradingEnabled());
+          quorumPeer.enableLocalSessionsUpgrading(config.isLocalSessionsUpgradingEnabled());
           //quorumPeer.setQuorumPeers(config.getAllMembers());
           quorumPeer.setElectionType(config.getElectionAlg());
           quorumPeer.setMyid(config.getServerId());
@@ -200,8 +217,10 @@ public class QuorumPeerMain {
               quorumPeer.setQuorumLearnerLoginContext(config.quorumLearnerLoginContext);
           }
           quorumPeer.setQuorumCnxnThreadsSize(config.quorumCnxnThreadsSize);
+          // quorumPeer 初始化
           quorumPeer.initialize();
-          
+
+          // 启动
           quorumPeer.start();
           quorumPeer.join();
       } catch (InterruptedException e) {

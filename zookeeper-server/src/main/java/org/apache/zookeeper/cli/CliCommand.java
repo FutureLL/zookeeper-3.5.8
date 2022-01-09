@@ -109,7 +109,8 @@ abstract public class CliCommand {
     abstract public CliCommand parse(String cmdArgs[]) throws CliParseException;
     
     /**
-     * 
+     * 执行命令
+     *
      * @return
      * @throws CliException
      */

@@ -54,10 +54,8 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
      * @param dataDir
      * @throws IOException
      */
-    FollowerZooKeeperServer(FileTxnSnapLog logFactory,QuorumPeer self,
-            ZKDatabase zkDb) throws IOException {
-        super(logFactory, self.tickTime, self.minSessionTimeout,
-                self.maxSessionTimeout, zkDb, self);
+    FollowerZooKeeperServer(FileTxnSnapLog logFactory,QuorumPeer self, ZKDatabase zkDb) throws IOException {
+        super(logFactory, self.tickTime, self.minSessionTimeout, self.maxSessionTimeout, zkDb, self);
         this.pendingSyncs = new ConcurrentLinkedQueue<Request>();
     }
 
@@ -67,14 +65,28 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
 
     @Override
     protected void setupRequestProcessors() {
+        // 集群中的 Follower 节点第三个处理器是 FinalRequestProcessor
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
-        commitProcessor = new CommitProcessor(finalProcessor,
-                Long.toString(getServerId()), true, getZooKeeperServerListener());
+
+        // 集群中的 Follower 节点第二个处理器是 CommitProcessor
+        commitProcessor = new CommitProcessor(finalProcessor, Long.toString(getServerId()), true, getZooKeeperServerListener());
+        /** @see CommitProcessor#run() */
         commitProcessor.start();
+
+        // 集群中的 Follower 节点第一个处理器是 FollowerRequestProcessor
+        // 写请求发送到 Leader
         firstProcessor = new FollowerRequestProcessor(this, commitProcessor);
+        /** @see FollowerRequestProcessor#run() */
         ((FollowerRequestProcessor) firstProcessor).start();
-        syncProcessor = new SyncRequestProcessor(this,
-                new SendAckRequestProcessor((Learner)getFollower()));
+
+        /**
+         * @see SyncRequestProcessor#run()【持久化txn、快照】
+         *
+         * 下一个要处理 SendAckRequestProcessor 处理器,发送 Ack
+         * @see SendAckRequestProcessor#processRequest(org.apache.zookeeper.server.Request)
+         */
+        syncProcessor = new SyncRequestProcessor(this, new SendAckRequestProcessor((Learner)getFollower()));
+        /** @see SyncRequestProcessor#run() */
         syncProcessor.start();
     }
 
@@ -85,6 +97,7 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
         if ((request.zxid & 0xffffffffL) != 0) {
             pendingTxns.add(request);
         }
+        // SyncRequestProcessor: 持久化
         syncProcessor.processRequest(request);
     }
 
@@ -96,18 +109,16 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
      */
     public void commit(long zxid) {
         if (pendingTxns.size() == 0) {
-            LOG.warn("Committing " + Long.toHexString(zxid)
-                    + " without seeing txn");
+            LOG.warn("Committing " + Long.toHexString(zxid) + " without seeing txn");
             return;
         }
         long firstElementZxid = pendingTxns.element().zxid;
         if (firstElementZxid != zxid) {
-            LOG.error("Committing zxid 0x" + Long.toHexString(zxid)
-                    + " but next pending txn 0x"
-                    + Long.toHexString(firstElementZxid));
+            LOG.error("Committing zxid 0x" + Long.toHexString(zxid) + " but next pending txn 0x" + Long.toHexString(firstElementZxid));
             System.exit(12);
         }
         Request request = pendingTxns.remove();
+        // 提交
         commitProcessor.commit(request);
     }
 

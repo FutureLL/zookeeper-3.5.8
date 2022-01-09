@@ -1,0 +1,1 @@
+package com.future.lock;/** * @Description: * @Author: lilei58 * @Date: Created in 2022/1/5 上午7:16 */public class Pay {    public void pay() {        System.out.println(Thread.currentThread().getName() + " 支付成功");    }}

@@ -76,6 +76,7 @@ public final class ConnectStringParser {
                 }
                 host = host.substring(0, pidx);
             }
+            // 存储地址信息,包括: hostname,addr,port
             serverAddresses.add(InetSocketAddress.createUnresolved(host, port));
         }
     }

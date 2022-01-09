@@ -52,7 +52,12 @@ public abstract class ServerCnxn implements Stats, Watcher {
     // (aka owned by) this class
     final public static Object me = new Object();
     private static final Logger LOG = LoggerFactory.getLogger(ServerCnxn.class);
-    
+
+    /**
+     * 存储权限验证的用户及密码 例命令为: addauth digest zhangsan:123456
+     * 则 Id 对象中的 scheme 属性值为 digest
+     * 则 Id 对象中的 id 属性值为 zhangsan:yCeSyEP/GY/yyC+vn8HHuqYMhGc=
+     */
     protected ArrayList<Id> authInfo = new ArrayList<Id>();
 
     private static final byte[] fourBytes = new byte[4];

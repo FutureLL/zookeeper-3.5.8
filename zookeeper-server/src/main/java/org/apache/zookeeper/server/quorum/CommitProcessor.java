@@ -65,8 +65,7 @@ import org.apache.zookeeper.server.ZooKeeperServerListener;
  * The current implementation solves the third constraint by simply allowing no
  * read requests to be processed in parallel with write requests.
  */
-public class CommitProcessor extends ZooKeeperCriticalThread implements
-        RequestProcessor {
+public class CommitProcessor extends ZooKeeperCriticalThread implements RequestProcessor {
     private static final Logger LOG = LoggerFactory.getLogger(CommitProcessor.class);
 
     /** Default: numCores */
@@ -89,11 +88,10 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements
         new LinkedBlockingQueue<Request>();
 
     /** Request for which we are currently awaiting a commit */
-    protected final AtomicReference<Request> nextPending =
-        new AtomicReference<Request>();
+    protected final AtomicReference<Request> nextPending = new AtomicReference<Request>();
+
     /** Request currently being committed (ie, sent off to next processor) */
-    private final AtomicReference<Request> currentlyCommitting =
-        new AtomicReference<Request>();
+    private final AtomicReference<Request> currentlyCommitting = new AtomicReference<Request>();
 
     /** The number of requests currently being processed */
     protected AtomicInteger numRequestsProcessing = new AtomicInteger(0);
@@ -111,8 +109,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements
      */
     boolean matchSyncs;
 
-    public CommitProcessor(RequestProcessor nextProcessor, String id,
-                           boolean matchSyncs, ZooKeeperServerListener listener) {
+    public CommitProcessor(RequestProcessor nextProcessor, String id, boolean matchSyncs, ZooKeeperServerListener listener) {
         super("CommitProcessor:" + id, listener);
         this.nextProcessor = nextProcessor;
         this.matchSyncs = matchSyncs;
@@ -159,10 +156,10 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements
         try {
             while (!stopped) {
                 synchronized(this) {
-                    while (
-                        !stopped &&
-                        ((queuedRequests.isEmpty() || isWaitingForCommit() || isProcessingCommit()) &&
-                         (committedRequests.isEmpty() || isProcessingRequest()))) {
+                    while (!stopped
+                            && ((queuedRequests.isEmpty() || isWaitingForCommit() || isProcessingCommit())
+                            && (committedRequests.isEmpty() || isProcessingRequest()))) {
+                        // 阻塞,等待投票结果
                         wait();
                     }
                 }
@@ -172,10 +169,12 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements
                  * find one for which we need to wait for a commit. We cannot
                  * process a read request while we are processing write request.
                  */
-                while (!stopped && !isWaitingForCommit() &&
-                       !isProcessingCommit() &&
-                       (request = queuedRequests.poll()) != null) {
+                while (!stopped && !isWaitingForCommit()
+                        && !isProcessingCommit()
+                        && (request = queuedRequests.poll()) != null) {
+                    // 判断是否是需要提交的类型,则给 nextPending 赋值
                     if (needCommit(request)) {
+                        // nextPending: 我们正在等待提交的请求
                         nextPending.set(request);
                     } else {
                         sendToNextProcessor(request);
@@ -222,9 +221,9 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements
              * properly.
              */
             Request pending = nextPending.get();
-            if (pending != null &&
-                pending.sessionId == request.sessionId &&
-                pending.cxid == request.cxid) {
+            if (pending != null
+                    && pending.sessionId == request.sessionId
+                    && pending.cxid == request.cxid) {
                 // we want to send our version of the request.
                 // the pointer to the connection in the request
                 pending.setHdr(request.getHdr());
@@ -329,6 +328,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements
         if (LOG.isDebugEnabled()) {
             LOG.debug("Committing request:: " + request);
         }
+        // 加入请求提交队列
         committedRequests.add(request);
         if (!isProcessingCommit()) {
             wakeup();
@@ -343,8 +343,10 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements
         if (LOG.isDebugEnabled()) {
             LOG.debug("Processing request:: " + request);
         }
+        // 添加到请求队列中,供线程从队列中取获取数据
         queuedRequests.add(request);
         if (!isWaitingForCommit()) {
+            // 唤醒
             wakeup();
         }
     }

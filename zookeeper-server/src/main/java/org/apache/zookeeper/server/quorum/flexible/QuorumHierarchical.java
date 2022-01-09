@@ -194,9 +194,9 @@ public class QuorumHierarchical implements QuorumVerifier {
                 long sid = Long.parseLong(key.substring(dot + 1));
                 QuorumServer qs = new QuorumServer(sid, value);
                 allMembers.put(Long.valueOf(sid), qs);  
-                if (qs.type == LearnerType.PARTICIPANT) 
-                   participatingMembers.put(Long.valueOf(sid), qs);
-                else {
+                if (qs.type == LearnerType.PARTICIPANT) {
+                    participatingMembers.put(Long.valueOf(sid), qs);
+                } else {
                    observingMembers.put(Long.valueOf(sid), qs);
                 }
             } else if (key.startsWith("group")) {

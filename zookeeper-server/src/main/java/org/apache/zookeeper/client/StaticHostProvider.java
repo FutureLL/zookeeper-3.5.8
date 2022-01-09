@@ -136,6 +136,7 @@ public final class StaticHostProvider implements HostProvider {
             throw new IllegalArgumentException(
                     "A HostProvider may not be empty!");
         }
+        // 打乱顺序
         this.serverAddresses = shuffle(serverAddresses);
         currentIndex = -1;
         lastIndex = -1;

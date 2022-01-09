@@ -24,6 +24,7 @@ import java.util.LinkedList;
 import java.util.Random;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import org.apache.zookeeper.server.persistence.FileTxnLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,12 +45,10 @@ import org.slf4j.LoggerFactory;
  *             be null. This change the semantic of txnlog on the observer
  *             since it only contains committed txns.
  */
-public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
-        RequestProcessor {
+public class SyncRequestProcessor extends ZooKeeperCriticalThread implements RequestProcessor {
     private static final Logger LOG = LoggerFactory.getLogger(SyncRequestProcessor.class);
     private final ZooKeeperServer zks;
-    private final LinkedBlockingQueue<Request> queuedRequests =
-        new LinkedBlockingQueue<Request>();
+    private final LinkedBlockingQueue<Request> queuedRequests = new LinkedBlockingQueue<Request>();
     private final RequestProcessor nextProcessor;
 
     private Thread snapInProcess = null;
@@ -69,10 +68,8 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
 
     private final Request requestOfDeath = Request.requestOfDeath;
 
-    public SyncRequestProcessor(ZooKeeperServer zks,
-            RequestProcessor nextProcessor) {
-        super("SyncThread:" + zks.getServerId(), zks
-                .getZooKeeperServerListener());
+    public SyncRequestProcessor(ZooKeeperServer zks, RequestProcessor nextProcessor) {
+        super("SyncThread:" + zks.getServerId(), zks.getZooKeeperServerListener());
         this.zks = zks;
         this.nextProcessor = nextProcessor;
         running = true;
@@ -106,6 +103,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
             while (true) {
                 Request si = null;
                 if (toFlush.isEmpty()) {
+                    // 从队列中取出数据
                     si = queuedRequests.take();
                 } else {
                     si = queuedRequests.poll();
@@ -118,20 +116,32 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
                     break;
                 }
                 if (si != null) {
-                    // track the number of records written to the log
+                    /**
+                     * 跟踪写入日志的记录数成功
+                     * track the number of records written to the log
+                     * @see FileTxnLog#append(org.apache.zookeeper.txn.TxnHeader, org.apache.jute.Record)
+                     */
                     if (zks.getZKDatabase().append(si)) {
                         logCount++;
+                        // snapCount: 快照数量,可配置
                         if (logCount > (snapCount / 2 + randRoll)) {
+                            // 重新设置 randRoll
                             randRoll = r.nextInt(snapCount/2);
-                            // roll the log
+                            /**
+                             * 滚动 log,相当于再生成一个文件
+                             * roll the log
+                             * @see FileTxnLog#rollLog()
+                             */
                             zks.getZKDatabase().rollLog();
                             // take a snapshot
                             if (snapInProcess != null && snapInProcess.isAlive()) {
                                 LOG.warn("Too busy to snap, skipping");
                             } else {
+                                // 启动一个打快照的线程
                                 snapInProcess = new ZooKeeperThread("Snapshot Thread") {
                                         public void run() {
                                             try {
+                                                // 打快照
                                                 zks.takeSnapshot();
                                             } catch(Exception e) {
                                                 LOG.warn("Unexpected exception", e);
@@ -142,12 +152,18 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
                             }
                             logCount = 0;
                         }
-                    } else if (toFlush.isEmpty()) {
+                    }
+                    //
+                    else if (toFlush.isEmpty()) {
                         // optimization for read heavy workloads
                         // iff this is a read, and there are no pending
-                        // flushes (writes), then just pass this to the next
-                        // processor
+                        // flushes (writes), then just pass this to the next processor
                         if (nextProcessor != null) {
+                            /**
+                             * 执行处理器
+                             * 作用: 更新内存&触发事件
+                             * @see FinalRequestProcessor#processRequest(org.apache.zookeeper.server.Request)
+                             */
                             nextProcessor.processRequest(si);
                             if (nextProcessor instanceof Flushable) {
                                 ((Flushable)nextProcessor).flush();
@@ -155,7 +171,9 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
                         }
                         continue;
                     }
+                    // 将请求添加到 LinkedList<Request> toFlush 中
                     toFlush.add(si);
+                    // 请求量 > 1000
                     if (toFlush.size() > 1000) {
                         flush(toFlush);
                     }
@@ -169,12 +187,15 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
         LOG.info("SyncRequestProcessor exited!");
     }
 
-    private void flush(LinkedList<Request> toFlush)
-        throws IOException, RequestProcessorException
-    {
-        if (toFlush.isEmpty())
+    private void flush(LinkedList<Request> toFlush) throws IOException, RequestProcessorException {
+        if (toFlush.isEmpty()) {
             return;
+        }
 
+        /**
+         * 提交日志,确保日志都存入到内存中
+         * @see FileTxnLog#commit()
+         */
         zks.getZKDatabase().commit();
         while (!toFlush.isEmpty()) {
             Request i = toFlush.remove();
@@ -211,6 +232,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements
 
     public void processRequest(Request request) {
         // request.addRQRec(">sync");
+        // 当前请求添加到 request 处理器中
         queuedRequests.add(request);
     }
 

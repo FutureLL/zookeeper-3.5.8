@@ -1,0 +1,1 @@
+package com.future.lock;/** * @Description: * @Author: lilei58 * @Date: Created in 2022/1/5 上午7:14 */public class Stock {    private static Integer COUNT = 1;    public boolean reduceStock() {        if (COUNT > 0) {            COUNT --;            return true;        }        return false;    }}

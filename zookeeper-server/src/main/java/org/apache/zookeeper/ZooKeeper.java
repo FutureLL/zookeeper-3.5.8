@@ -457,10 +457,8 @@ public class ZooKeeper implements AutoCloseable {
          *                                                        Event.EventType, java.lang.String)
          */
         @Override
-        public Set<Watcher> materialize(Watcher.Event.KeeperState state,
-                                        Watcher.Event.EventType type,
-                                        String clientPath)
-        {
+        public Set<Watcher> materialize(Watcher.Event.KeeperState state, Watcher.Event.EventType type, String clientPath) {
+
             Set<Watcher> result = new HashSet<Watcher>();
 
             switch (type) {
@@ -498,6 +496,8 @@ public class ZooKeeper implements AutoCloseable {
             case NodeDataChanged:
             case NodeCreated:
                 synchronized (dataWatches) {
+                    // Zookeeper 原生客户端,监听器只能使用一次,就是因为这里,remove() 删除掉就不存在了
+                    // 如果使用 get() 就可以使用多次了
                     addTo(dataWatches.remove(clientPath), result);
                 }
                 synchronized (existWatches) {
@@ -542,8 +542,7 @@ public class ZooKeeper implements AutoCloseable {
     public abstract class WatchRegistration {
         private Watcher watcher;
         private String clientPath;
-        public WatchRegistration(Watcher watcher, String clientPath)
-        {
+        public WatchRegistration(Watcher watcher, String clientPath) {
             this.watcher = watcher;
             this.clientPath = clientPath;
         }
@@ -557,6 +556,7 @@ public class ZooKeeper implements AutoCloseable {
          */
         public void register(int rc) {
             if (shouldAddWatch(rc)) {
+                // 会将设置的 Watcher 注册到 Map 中
                 Map<String, Set<Watcher>> watches = getWatches(rc);
                 synchronized(watches) {
                     Set<Watcher> watchers = watches.get(clientPath);
@@ -868,19 +868,41 @@ public class ZooKeeper implements AutoCloseable {
         LOG.info("Initiating client connection, connectString=" + connectString
                 + " sessionTimeout=" + sessionTimeout + " watcher=" + watcher);
 
+        // 提供默认配置
         if (clientConfig == null) {
             clientConfig = new ZKClientConfig();
         }
+        // 启动 zkCli 时,clientConfig 为 null
         this.clientConfig = clientConfig;
+        // 根据 ZKClientConfig 创建一个 ZKWatchManager 对象
         watchManager = defaultWatchManager();
+        // 将 Watcher 设置到 ZKWatchManager,保存默认的 Watcher
         watchManager.defaultWatcher = watcher;
-        ConnectStringParser connectStringParser = new ConnectStringParser(
-                connectString);
+        // 创建 ConnectStringParser 对象,用于存储解析包装过的连接地址信息
+        ConnectStringParser connectStringParser = new ConnectStringParser(connectString);
+        /**
+         * 提前调用了 createDefaultHostProvider(connectString)
+         * aHostProvider = createDefaultHostProvider(connectString)
+         * @see org.apache.zookeeper.ZooKeeper#createDefaultHostProvider
+         * host 信息,存储的是随机打乱之后的 host 信息
+         */
         hostProvider = aHostProvider;
 
-        cnxn = createConnection(connectStringParser.getChrootPath(),
-                hostProvider, sessionTimeout, this, watchManager,
-                getClientCnxnSocket(), canBeReadOnly);
+        /**
+         * 建立连接:
+         * @see org.apache.zookeeper.ClientCnxn#ClientCnxn(java.lang.String, org.apache.zookeeper.client.HostProvider, int, org.apache.zookeeper.ZooKeeper, org.apache.zookeeper.ClientWatchManager, org.apache.zookeeper.ClientCnxnSocket, long, byte[], boolean)
+         */
+        cnxn = createConnection(
+                connectStringParser.getChrootPath(),
+                hostProvider,
+                sessionTimeout,
+                this,
+                watchManager,
+                // 返回一个 Socket NIO 的实例
+                getClientCnxnSocket(),
+                canBeReadOnly
+        );
+        // 启动
         cnxn.start();
     }
 
@@ -1308,8 +1330,7 @@ public class ZooKeeper implements AutoCloseable {
 
     // default hostprovider
     private static HostProvider createDefaultHostProvider(String connectString) {
-        return new StaticHostProvider(
-                new ConnectStringParser(connectString).getServerAddresses());
+        return new StaticHostProvider(new ConnectStringParser(connectString).getServerAddresses());
     }
 
     // VisibleForTesting
@@ -1412,6 +1433,7 @@ public class ZooKeeper implements AutoCloseable {
         }
 
         try {
+            // 调用 ClientCnxn 类的 close() 方法
             cnxn.close();
         } catch (IOException e) {
             if (LOG.isDebugEnabled()) {
@@ -1512,20 +1534,27 @@ public class ZooKeeper implements AutoCloseable {
      * @throws InterruptedException if the transaction is interrupted
      * @throws IllegalArgumentException if an invalid path is specified
      */
-    public String create(final String path, byte data[], List<ACL> acl,
-            CreateMode createMode)
-        throws KeeperException, InterruptedException
-    {
+    public String create(final String path, byte data[], List<ACL> acl, CreateMode createMode) throws KeeperException, InterruptedException {
+
+        // 路径
         final String clientPath = path;
+        // 校验路径
         PathUtils.validatePath(clientPath, createMode.isSequential());
         EphemeralType.validateTTL(createMode, -1);
 
+        // 增加一个前缀根路径
         final String serverPath = prependChroot(clientPath);
 
+        // 构建请求头
         RequestHeader h = new RequestHeader();
+        // 操作ID
         h.setType(createMode.isContainer() ? ZooDefs.OpCode.createContainer : ZooDefs.OpCode.create);
+
+        // 创建 Request
         CreateRequest request = new CreateRequest();
+        // 创建 Response
         CreateResponse response = new CreateResponse();
+        // 设置请求 数据、类型、路径、ACL 权限
         request.setData(data);
         request.setFlags(createMode.toFlag());
         request.setPath(serverPath);
@@ -1533,12 +1562,14 @@ public class ZooKeeper implements AutoCloseable {
             throw new KeeperException.InvalidACLException();
         }
         request.setAcl(acl);
+        // ** 提交请求
         ReplyHeader r = cnxn.submitRequest(h, request, response, null);
+        // 返回信息中是否有错误信息
         if (r.getErr() != 0) {
-            throw KeeperException.create(KeeperException.Code.get(r.getErr()),
-                    clientPath);
+            throw KeeperException.create(KeeperException.Code.get(r.getErr()), clientPath);
         }
         if (cnxn.chrootPath == null) {
+            // 将响应路径返回
             return response.getPath();
         } else {
             return response.getPath().substring(cnxn.chrootPath.length());
@@ -2106,9 +2137,7 @@ public class ZooKeeper implements AutoCloseable {
      * @throws InterruptedException If the server transaction is interrupted.
      * @throws IllegalArgumentException if an invalid path is specified
      */
-    public byte[] getData(final String path, Watcher watcher, Stat stat)
-        throws KeeperException, InterruptedException
-     {
+    public byte[] getData(final String path, Watcher watcher, Stat stat) throws KeeperException, InterruptedException {
         final String clientPath = path;
         PathUtils.validatePath(clientPath);
 
@@ -2124,12 +2153,16 @@ public class ZooKeeper implements AutoCloseable {
         h.setType(ZooDefs.OpCode.getData);
         GetDataRequest request = new GetDataRequest();
         request.setPath(serverPath);
+        // 设置监听器是否为空
         request.setWatch(watcher != null);
         GetDataResponse response = new GetDataResponse();
+        /**
+         * 提交请求
+         * @see org.apache.zookeeper.ClientCnxn#submitRequest(org.apache.zookeeper.proto.RequestHeader, org.apache.jute.Record, org.apache.jute.Record, org.apache.zookeeper.ZooKeeper.WatchRegistration, org.apache.zookeeper.WatchDeregistration)
+         */
         ReplyHeader r = cnxn.submitRequest(h, request, response, wcb);
         if (r.getErr() != 0) {
-            throw KeeperException.create(KeeperException.Code.get(r.getErr()),
-                    clientPath);
+            throw KeeperException.create(KeeperException.Code.get(r.getErr()), clientPath);
         }
         if (stat != null) {
             DataTree.copyStat(response.getStat(), stat);
@@ -3054,18 +3087,21 @@ public class ZooKeeper implements AutoCloseable {
     }
 
     private ClientCnxnSocket getClientCnxnSocket() throws IOException {
-        String clientCnxnSocketName = getClientConfig().getProperty(
-                ZKClientConfig.ZOOKEEPER_CLIENT_CNXN_SOCKET);
+        // 取出系统属性的值: zookeeper.clientCnxnSocket
+        String clientCnxnSocketName = getClientConfig().getProperty(ZKClientConfig.ZOOKEEPER_CLIENT_CNXN_SOCKET);
         if (clientCnxnSocketName == null) {
+            // 系统使用 NIO 作为 ZK 底层客户端及服务端之间的传输通信
             clientCnxnSocketName = ClientCnxnSocketNIO.class.getName();
         }
         try {
+            // 生成一个类
             Constructor<?> clientCxnConstructor = Class.forName(clientCnxnSocketName).getDeclaredConstructor(ZKClientConfig.class);
+            // 实例化
             ClientCnxnSocket clientCxnSocket = (ClientCnxnSocket) clientCxnConstructor.newInstance(getClientConfig());
+            // 返回一个 Socket NIO 的实例
             return clientCxnSocket;
         } catch (Exception e) {
-            IOException ioe = new IOException("Couldn't instantiate "
-                    + clientCnxnSocketName);
+            IOException ioe = new IOException("Couldn't instantiate " + clientCnxnSocketName);
             ioe.initCause(e);
             throw ioe;
         }

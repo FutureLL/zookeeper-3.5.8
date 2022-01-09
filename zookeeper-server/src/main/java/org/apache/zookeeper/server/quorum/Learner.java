@@ -188,8 +188,8 @@ public class Learner {
             oa.write(b);
         }
         oa.close();
-        QuorumPacket qp = new QuorumPacket(Leader.REQUEST, -1, baos
-                .toByteArray(), request.authInfo);
+        // 请求转发给 Leader
+        QuorumPacket qp = new QuorumPacket(Leader.REQUEST, -1, baos.toByteArray(), request.authInfo);
         writePacket(qp, true);
     }
     
@@ -242,8 +242,9 @@ public class Learner {
      * @throws ConnectException
      * @throws InterruptedException
      */
-    protected void connectToLeader(InetSocketAddress addr, String hostname)
-            throws IOException, InterruptedException, X509Exception {
+    protected void connectToLeader(InetSocketAddress addr, String hostname) throws IOException, InterruptedException, X509Exception {
+
+        // 创建 Socket 连接
         this.sock = createSocket();
 
         int initLimitTime = self.tickTime * self.initLimit;
@@ -259,10 +260,25 @@ public class Learner {
                     throw new IOException("initLimit exceeded on retries.");
                 }
 
+                // Socket 连接
                 sockConnect(sock, addr, Math.min(self.tickTime * self.syncLimit, remainingInitLimitTime));
                 if (self.isSslQuorum())  {
                     ((SSLSocket) sock).startHandshake();
                 }
+                /**
+                 * 是否启用 tcp_nodelay,提高网络吞吐量的同时必然降低了网络的实时性
+                 * Nagle算法
+                 *  TCP/IP 协议中,无论发送多少数据,总是要在数据前面加上协议头,同时,对方接收到数据,也需要发送ACK表示确认。
+                 *  为了尽可能的利用网络带宽,TCP总是希望尽可能的发送足够大的数据。（一个连接会设置MSS参数,因此,
+                 *  TCP/IP希望每次都能够以MSS尺寸的数据块来发送数据）。Nagle算法就是为了尽可能发送大块数据,避免网络中充斥着许多小数据块。
+                 *
+                 *  Nagle 算法的基本定义是任意时刻,最多只能有一个未被确认的小段。 所谓“小段”,指的是小于MSS尺寸的数据块,
+                 *  所谓“未被确认”,是指一个数据块发送出去后,没有收到对方发送的ACK确认该数据已收到。
+                 *
+                 *  Nagle 算法只允许一个未被ACK的包存在于网络,它并不管包的大小,因此它事实上就是一个扩展的停-等协议,
+                 *  只不过它是基于包停-等的,而不是基于字节停-等的。Nagle算法完全由TCP协议的ACK机制决定,这会带来一些问题,
+                 *  比如如果对端ACK回复很快的话,Nagle事实上不会拼接太多的数据包,虽然避免了网络拥塞,网络总体的利用率依然很低。
+                 */
                 sock.setTcpNoDelay(nodelay);
                 break;
             } catch (IOException e) {
@@ -290,8 +306,7 @@ public class Learner {
 
         self.authLearner.authenticate(sock, hostname);
 
-        leaderIs = BinaryInputArchive.getArchive(new BufferedInputStream(
-                sock.getInputStream()));
+        leaderIs = BinaryInputArchive.getArchive(new BufferedInputStream(sock.getInputStream()));
         bufferedOutput = new BufferedOutputStream(sock.getOutputStream());
         leaderOs = BinaryOutputArchive.getArchive(bufferedOutput);
     }
@@ -331,10 +346,12 @@ public class Learner {
         BinaryOutputArchive boa = BinaryOutputArchive.getArchive(bsid);
         boa.writeRecord(li, "LearnerInfo");
         qp.setData(bsid.toByteArray());
-        
+
+        // 写数据
         writePacket(qp, true);
         readPacket(qp);        
         final long newEpoch = ZxidUtils.getEpochFromZxid(qp.getZxid());
+        // 读取 LEADERINFO
 		if (qp.getType() == Leader.LEADERINFO) {
         	// we are connected to a 1.0 server so accept the new epoch and read the next packet
         	leaderProtocolVersion = ByteBuffer.wrap(qp.getData()).getInt();
@@ -352,6 +369,7 @@ public class Learner {
         	} else {
         		throw new IOException("Leaders epoch, " + newEpoch + " is less than accepted epoch, " + self.getAcceptedEpoch());
         	}
+        	// Follower 发送 ack 信息
         	QuorumPacket ackNewEpoch = new QuorumPacket(Leader.ACKEPOCH, lastLoggedZxid, epochBytes, null);
         	writePacket(ackNewEpoch, true);
             return ZxidUtils.makeZxid(newEpoch, 0);
@@ -368,7 +386,9 @@ public class Learner {
     } 
     
     /**
-     * Finally, synchronize our history with the Leader. 
+     * 将历史记录与 Leader 同步
+     * Finally, synchronize our history with the Leader.
+     *
      * @param newLeaderZxid
      * @throws IOException
      * @throws InterruptedException
@@ -387,14 +407,17 @@ public class Learner {
         LinkedList<Long> packetsCommitted = new LinkedList<Long>();
         LinkedList<PacketInFlight> packetsNotCommitted = new LinkedList<PacketInFlight>();
         synchronized (zk) {
+            // 如果 Follower 的记录和 Leader 的记录相差的不多,使用增量同步的方式将一个一个写请求发送给 Follower
             if (qp.getType() == Leader.DIFF) {
                 LOG.info("Getting a diff from the leader 0x{}", Long.toHexString(qp.getZxid()));
                 snapshotNeeded = false;
             }
+            // 如果 Follower 的记录和当前 Leader 相差太多,Leader 直接将自己的整个内存数据发送给 Follower
             else if (qp.getType() == Leader.SNAP) {
                 LOG.info("Getting a snapshot from leader 0x" + Long.toHexString(qp.getZxid()));
                 // The leader is going to dump the database
                 // db is clear as part of deserializeSnapshot()
+                // 反序列化快照数据
                 zk.getZKDatabase().deserializeSnapshot(leaderIs);
                 // ZOOKEEPER-2819: overwrite config node content extracted
                 // from leader snapshot with local config, to avoid potential
@@ -409,23 +432,23 @@ public class Learner {
                     throw new IOException("Missing signature");                   
                 }
                 zk.getZKDatabase().setlastProcessedZxid(qp.getZxid());
-            } else if (qp.getType() == Leader.TRUNC) {
+            }
+            // 这个情况的出现代表 Follower 的 zxid 是领先于当前的 Leader 的(可能是以前的 Leader),需要 Follower 自行把多余的部分给截断,降级到和 Leader 一致
+            else if (qp.getType() == Leader.TRUNC) {
                 //we need to truncate the log to the lastzxid of the leader
-                LOG.warn("Truncating log to get in sync with the leader 0x"
-                        + Long.toHexString(qp.getZxid()));
+                LOG.warn("Truncating log to get in sync with the leader 0x" + Long.toHexString(qp.getZxid()));
+                // 删除数据,超出部分的 Zxid
                 boolean truncated=zk.getZKDatabase().truncateLog(qp.getZxid());
                 if (!truncated) {
                     // not able to truncate the log
-                    LOG.error("Not able to truncate the log "
-                            + Long.toHexString(qp.getZxid()));
+                    LOG.error("Not able to truncate the log " + Long.toHexString(qp.getZxid()));
                     System.exit(13);
                 }
                 zk.getZKDatabase().setlastProcessedZxid(qp.getZxid());
 
             }
             else {
-                LOG.error("Got unexpected packet from leader: {}, exiting ... ",
-                          LearnerHandler.packetToString(qp));
+                LOG.error("Got unexpected packet from leader: {}, exiting ... ", LearnerHandler.packetToString(qp));
                 System.exit(13);
 
             }
@@ -443,7 +466,9 @@ public class Learner {
             boolean writeToTxnLog = !snapshotNeeded;
             // we are now going to start getting transactions to apply followed by an UPTODATE
             outerLoop:
+            // 一直在运行
             while (self.isRunning()) {
+                // 读取 qp
                 readPacket(qp);
                 switch(qp.getType()) {
                 case Leader.PROPOSAL:
@@ -451,17 +476,14 @@ public class Learner {
                     pif.hdr = new TxnHeader();
                     pif.rec = SerializeUtils.deserializeTxn(qp.getData(), pif.hdr);
                     if (pif.hdr.getZxid() != lastQueued + 1) {
-                    LOG.warn("Got zxid 0x"
-                            + Long.toHexString(pif.hdr.getZxid())
-                            + " expected 0x"
-                            + Long.toHexString(lastQueued + 1));
+                    LOG.warn("Got zxid 0x" + Long.toHexString(pif.hdr.getZxid()) + " expected 0x" + Long.toHexString(lastQueued + 1));
                     }
                     lastQueued = pif.hdr.getZxid();
                     
-                    if (pif.hdr.getType() == OpCode.reconfig){                
-                        SetDataTxn setDataTxn = (SetDataTxn) pif.rec;       
-                       QuorumVerifier qv = self.configFromString(new String(setDataTxn.getData()));
-                       self.setLastSeenQuorumVerifier(qv, true);                               
+                    if (pif.hdr.getType() == OpCode.reconfig) {
+                        SetDataTxn setDataTxn = (SetDataTxn) pif.rec;
+                        QuorumVerifier qv = self.configFromString(new String(setDataTxn.getData()));
+                        self.setLastSeenQuorumVerifier(qv, true);
                     }
                     
                     packetsNotCommitted.add(pif);
@@ -471,8 +493,7 @@ public class Learner {
                     pif = packetsNotCommitted.peekFirst();
                     if (pif.hdr.getZxid() == qp.getZxid() && qp.getType() == Leader.COMMITANDACTIVATE) {
                         QuorumVerifier qv = self.configFromString(new String(((SetDataTxn) pif.rec).getData()));
-                        boolean majorChange = self.processReconfig(qv, ByteBuffer.wrap(qp.getData()).getLong(),
-                                qp.getZxid(), true);
+                        boolean majorChange = self.processReconfig(qv, ByteBuffer.wrap(qp.getData()).getLong(), qp.getZxid(), true);
                         if (majorChange) {
                             throw new Exception("changes proposed in reconfig");
                         }
@@ -485,6 +506,7 @@ public class Learner {
                             packetsNotCommitted.remove();
                         }
                     } else {
+                        // 将 Zxid 添加到包提交队列中
                         packetsCommitted.add(qp.getZxid());
                     }
                     break;
@@ -500,8 +522,7 @@ public class Learner {
                         buffer.get(remainingdata);
                         packet.rec = SerializeUtils.deserializeTxn(remainingdata, packet.hdr);
                         QuorumVerifier qv = self.configFromString(new String(((SetDataTxn)packet.rec).getData()));
-                        boolean majorChange =
-                                self.processReconfig(qv, suggestedLeaderId, qp.getZxid(), true);
+                        boolean majorChange = self.processReconfig(qv, suggestedLeaderId, qp.getZxid(), true);
                         if (majorChange) {
                             throw new Exception("changes proposed in reconfig");
                         }
@@ -509,10 +530,7 @@ public class Learner {
                         packet.rec = SerializeUtils.deserializeTxn(qp.getData(), packet.hdr);
                         // Log warning message if txn comes out-of-order
                         if (packet.hdr.getZxid() != lastQueued + 1) {
-                            LOG.warn("Got zxid 0x"
-                                    + Long.toHexString(packet.hdr.getZxid())
-                                    + " expected 0x"
-                                    + Long.toHexString(lastQueued + 1));
+                            LOG.warn("Got zxid 0x" + Long.toHexString(packet.hdr.getZxid()) + " expected 0x" + Long.toHexString(lastQueued + 1));
                         }
                         lastQueued = packet.hdr.getZxid();
                     }
@@ -528,8 +546,7 @@ public class Learner {
                 case Leader.UPTODATE:
                     LOG.info("Learner received UPTODATE message");                                      
                     if (newLeaderQV!=null) {
-                       boolean majorChange =
-                           self.processReconfig(newLeaderQV, null, null, true);
+                       boolean majorChange = self.processReconfig(newLeaderQV, null, null, true);
                        if (majorChange) {
                            throw new Exception("changes proposed in reconfig");
                        }
@@ -540,6 +557,7 @@ public class Learner {
                     }
                     self.setZooKeeperServer(zk);
                     self.adminServer.setZooKeeperServer(zk);
+                    // 想要退出就要跳到这里
                     break outerLoop;
                 case Leader.NEWLEADER: // Getting NEWLEADER here instead of in discovery 
                     // means this is Zab 1.0
@@ -569,6 +587,7 @@ public class Learner {
         ack.setZxid(ZxidUtils.makeZxid(newEpoch, 0));
         writePacket(ack, true);
         sock.setSoTimeout(self.tickTime * self.syncLimit);
+        // 启动
         zk.startup();
         /*
          * Update the election vote here to ensure that all members of the
@@ -585,26 +604,23 @@ public class Learner {
             for(PacketInFlight p: packetsNotCommitted) {
                 fzk.logRequest(p.hdr, p.rec);
             }
+            // 循环提交
             for(Long zxid: packetsCommitted) {
                 fzk.commit(zxid);
             }
         } else if (zk instanceof ObserverZooKeeperServer) {
-            // Similar to follower, we need to log requests between the snapshot
-            // and UPTODATE
+            // Similar to follower, we need to log requests between the snapshot and UPTODATE
             ObserverZooKeeperServer ozk = (ObserverZooKeeperServer) zk;
             for (PacketInFlight p : packetsNotCommitted) {
                 Long zxid = packetsCommitted.peekFirst();
                 if (p.hdr.getZxid() != zxid) {
                     // log warning message if there is no matching commit
                     // old leader send outstanding proposal to observer
-                    LOG.warn("Committing " + Long.toHexString(zxid)
-                            + ", but next proposal is "
-                            + Long.toHexString(p.hdr.getZxid()));
+                    LOG.warn("Committing " + Long.toHexString(zxid) + ", but next proposal is " + Long.toHexString(p.hdr.getZxid()));
                     continue;
                 }
                 packetsCommitted.remove();
-                Request request = new Request(null, p.hdr.getClientId(),
-                        p.hdr.getCxid(), p.hdr.getType(), null, null);
+                Request request = new Request(null, p.hdr.getClientId(), p.hdr.getCxid(), p.hdr.getType(), null, null);
                 request.setTxn(p.rec);
                 request.setHdr(p.hdr);
                 ozk.commitRequest(request);

@@ -35,8 +35,7 @@ import org.apache.zookeeper.server.persistence.FileTxnSnapLog;
  *
  */
 public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
-    private static final Logger LOG =
-        LoggerFactory.getLogger(ObserverZooKeeperServer.class);        
+    private static final Logger LOG = LoggerFactory.getLogger(ObserverZooKeeperServer.class);
     
     /**
      * Enable since request processor for writing txnlog to disk and
@@ -90,12 +89,17 @@ public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
         // We might consider changing the processor behaviour of 
         // Observers to, for example, remove the disk sync requirements.
         // Currently, they behave almost exactly the same as followers.
+        // 集群中的 Observer 节点第三个处理器是 FinalRequestProcessor
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
-        commitProcessor = new CommitProcessor(finalProcessor,
-                Long.toString(getServerId()), true,
-                getZooKeeperServerListener());
+
+        // 集群中的 Observer 节点第二个处理器是 CommitProcessor
+        commitProcessor = new CommitProcessor(finalProcessor, Long.toString(getServerId()), true, getZooKeeperServerListener());
+        /** @see CommitProcessor#run() */
         commitProcessor.start();
+
+        // 集群中的 Observer 节点第一个处理器是 ObserverRequestProcessor
         firstProcessor = new ObserverRequestProcessor(this, commitProcessor);
+        /** @see ObserverRequestProcessor#run() */
         ((ObserverRequestProcessor) firstProcessor).start();
 
         /*
@@ -106,7 +110,9 @@ public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
          * However, this may degrade performance as it has to write to disk
          * and do periodic snapshot which may double the memory requirements
          */
+        // 控制观察值是否需要持久化操作
         if (syncRequestProcessorEnabled) {
+            // 对事务的请求及打印快照
             syncProcessor = new SyncRequestProcessor(this, null);
             syncProcessor.start();
         }

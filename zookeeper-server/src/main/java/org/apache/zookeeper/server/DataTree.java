@@ -83,8 +83,7 @@ public class DataTree {
      * This hashtable provides a fast lookup to the datanodes. The tree is the
      * source of truth and is where all the locking occurs
      */
-    private final ConcurrentHashMap<String, DataNode> nodes =
-        new ConcurrentHashMap<String, DataNode>();
+    private final ConcurrentHashMap<String, DataNode> nodes = new ConcurrentHashMap<String, DataNode>();
 
     private final WatchManager dataWatches = new WatchManager();
 
@@ -435,8 +434,8 @@ public class DataTree {
      */
     public void createNode(final String path, byte data[], List<ACL> acl,
             long ephemeralOwner, int parentCVersion, long zxid, long time, Stat outputStat)
-            throws KeeperException.NoNodeException,
-            KeeperException.NodeExistsException {
+            throws KeeperException.NoNodeException, KeeperException.NodeExistsException {
+
         int lastSlash = path.lastIndexOf('/');
         String parentName = path.substring(0, lastSlash);
         String childName = path.substring(lastSlash + 1);
@@ -497,8 +496,7 @@ public class DataTree {
                 pTrie.addPath(parentName.substring(quotaZookeeper.length()));
             }
             if (Quotas.statNode.equals(childName)) {
-                updateQuotaForPath(parentName
-                        .substring(quotaZookeeper.length()));
+                updateQuotaForPath(parentName.substring(quotaZookeeper.length()));
             }
         }
         // also check to update the quotas for this node
@@ -508,22 +506,22 @@ public class DataTree {
             updateCount(lastPrefix, 1);
             updateBytes(lastPrefix, data == null ? 0 : data.length);
         }
+        // 抛出两个事件
+        // 创建节点事件
         dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
-        childWatches.triggerWatch(parentName.equals("") ? "/" : parentName,
-                Event.EventType.NodeChildrenChanged);
+        // 子节点改变事件
+        childWatches.triggerWatch(parentName.equals("") ? "/" : parentName, Event.EventType.NodeChildrenChanged);
     }
 
     /**
      * remove the path from the datatree
      *
-     * @param path
-     *            the path to of the node to be deleted
-     * @param zxid
-     *            the current zxid
+     * @param path the path to of the node to be deleted
+     * @param zxid the current zxid
      * @throws KeeperException.NoNodeException
      */
-    public void deleteNode(String path, long zxid)
-            throws KeeperException.NoNodeException {
+    public void deleteNode(String path, long zxid) throws KeeperException.NoNodeException {
+
         int lastSlash = path.lastIndexOf('/');
         String parentName = path.substring(0, lastSlash);
         String childName = path.substring(lastSlash + 1);
@@ -592,26 +590,34 @@ public class DataTree {
             updateBytes(lastPrefix, bytes);
         }
         if (LOG.isTraceEnabled()) {
-            ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK,
-                    "dataWatches.triggerWatch " + path);
-            ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK,
-                    "childWatches.triggerWatch " + parentName);
+            ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK, "dataWatches.triggerWatch " + path);
+            ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK, "childWatches.triggerWatch " + parentName);
         }
-        Set<Watcher> processed = dataWatches.triggerWatch(path,
-                EventType.NodeDeleted);
+        Set<Watcher> processed = dataWatches.triggerWatch(path, EventType.NodeDeleted);
         childWatches.triggerWatch(path, EventType.NodeDeleted, processed);
-        childWatches.triggerWatch("".equals(parentName) ? "/" : parentName,
-                EventType.NodeChildrenChanged);
+        childWatches.triggerWatch("".equals(parentName) ? "/" : parentName, EventType.NodeChildrenChanged);
     }
 
-    public Stat setData(String path, byte data[], int version, long zxid,
-            long time) throws KeeperException.NoNodeException {
+    /**
+     * setData 核心方法
+     *
+     * @param path
+     * @param data
+     * @param version
+     * @param zxid
+     * @param time
+     * @return
+     * @throws KeeperException.NoNodeException
+     */
+    public Stat setData(String path, byte data[], int version, long zxid, long time) throws KeeperException.NoNodeException {
+
         Stat s = new Stat();
         DataNode n = nodes.get(path);
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
         byte lastdata[] = null;
+        // 修改 Zookeeper 内存数据
         synchronized (n) {
             lastdata = n.data;
             n.data = data;
@@ -623,9 +629,12 @@ public class DataTree {
         // now update if the path is in a quota subtree.
         String lastPrefix = getMaxPrefixWithQuota(path);
         if(lastPrefix != null) {
-          this.updateBytes(lastPrefix, (data == null ? 0 : data.length)
-              - (lastdata == null ? 0 : lastdata.length));
+          this.updateBytes(lastPrefix, (data == null ? 0 : data.length) - (lastdata == null ? 0 : lastdata.length));
         }
+        /**
+         * 触发事件
+         * @see WatchManager#triggerWatch(java.lang.String, org.apache.zookeeper.Watcher.Event.EventType, java.util.Set)
+         */
         dataWatches.triggerWatch(path, EventType.NodeDataChanged);
         return s;
     }
@@ -650,8 +659,7 @@ public class DataTree {
         }
     }
 
-    public byte[] getData(String path, Stat stat, Watcher watcher)
-            throws KeeperException.NoNodeException {
+    public byte[] getData(String path, Stat stat, Watcher watcher) throws KeeperException.NoNodeException {
         DataNode n = nodes.get(path);
         if (n == null) {
             throw new KeeperException.NoNodeException();
@@ -659,6 +667,7 @@ public class DataTree {
         synchronized (n) {
             n.copyStat(stat);
             if (watcher != null) {
+                // 将监听器添加到 dataWatches 中
                 dataWatches.addWatch(path, watcher);
             }
             return n.data;
@@ -789,8 +798,7 @@ public class DataTree {
         return this.processTxn(header, txn, false);
     }
 
-    public ProcessTxnResult processTxn(TxnHeader header, Record txn, boolean isSubTxn)
-    {
+    public ProcessTxnResult processTxn(TxnHeader header, Record txn, boolean isSubTxn) {
         ProcessTxnResult rc = new ProcessTxnResult();
 
         try {
@@ -804,6 +812,10 @@ public class DataTree {
                 case OpCode.create:
                     CreateTxn createTxn = (CreateTxn) txn;
                     rc.path = createTxn.getPath();
+                    /**
+                     * 创建节点
+                     * Add a new node to the DataTree.
+                     */
                     createNode(
                             createTxn.getPath(),
                             createTxn.getData(),
@@ -861,6 +873,7 @@ public class DataTree {
                 case OpCode.setData:
                     SetDataTxn setDataTxn = (SetDataTxn) txn;
                     rc.path = setDataTxn.getPath();
+                    // setData 核心方法
                     rc.stat = setData(setDataTxn.getPath(), setDataTxn
                             .getData(), setDataTxn.getVersion(), header
                             .getZxid(), header.getTime());
@@ -872,6 +885,7 @@ public class DataTree {
                             setACLTxn.getVersion());
                     break;
                 case OpCode.closeSession:
+                    // 关闭会话
                     killSession(header.getClientId(), header.getZxid());
                     break;
                 case OpCode.error:
@@ -1042,21 +1056,18 @@ public class DataTree {
         // so there is no need for synchronization. The list is not
         // changed here. Only create and delete change the list which
         // are again called from FinalRequestProcessor in sequence.
+        // 移除临时节点
         HashSet<String> list = ephemerals.remove(session);
         if (list != null) {
             for (String path : list) {
                 try {
+                    // 删除节点
                     deleteNode(path, zxid);
                     if (LOG.isDebugEnabled()) {
-                        LOG
-                                .debug("Deleting ephemeral node " + path
-                                        + " for session 0x"
-                                        + Long.toHexString(session));
+                        LOG.debug("Deleting ephemeral node " + path + " for session 0x" + Long.toHexString(session));
                     }
                 } catch (NoNodeException e) {
-                    LOG.warn("Ignoring NoNodeException for path " + path
-                            + " while removing ephemeral for dead session 0x"
-                            + Long.toHexString(session));
+                    LOG.warn("Ignoring NoNodeException for path " + path + " while removing ephemeral for dead session 0x" + Long.toHexString(session));
                 }
             }
         }

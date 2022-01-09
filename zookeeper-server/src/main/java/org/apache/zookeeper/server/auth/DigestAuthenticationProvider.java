@@ -36,8 +36,7 @@ public class DigestAuthenticationProvider implements AuthenticationProvider {
      * and value of "super:<base64encoded(SHA1(password))>" to enable
      * super user access (i.e. acls disabled)
      */
-    private final static String superDigest = System.getProperty(
-        "zookeeper.DigestAuthenticationProvider.superDigest");
+    private final static String superDigest = System.getProperty("zookeeper.DigestAuthenticationProvider.superDigest");
 
     public String getScheme() {
         return "digest";
@@ -88,20 +87,20 @@ public class DigestAuthenticationProvider implements AuthenticationProvider {
         return i == 62 ? '+' : '/';
     }
 
-    static public String generateDigest(String idPassword)
-            throws NoSuchAlgorithmException {
+    static public String generateDigest(String idPassword) throws NoSuchAlgorithmException {
+
         String parts[] = idPassword.split(":", 2);
-        byte digest[] = MessageDigest.getInstance("SHA1").digest(
-                idPassword.getBytes());
+        byte digest[] = MessageDigest.getInstance("SHA1").digest(idPassword.getBytes());
         return parts[0] + ":" + base64Encode(digest);
     }
 
-    public KeeperException.Code 
-        handleAuthentication(ServerCnxn cnxn, byte[] authData)
-    {
+    public KeeperException.Code handleAuthentication(ServerCnxn cnxn, byte[] authData) {
+
         String id = new String(authData);
         try {
+            // 签名,将 zhangsan:123456 变成 zhangsan:yCeSyEP/GY/yyC+vn8HHuqYMhGc= 类似于这样
             String digest = generateDigest(id);
+            // 启动参数是否配置了超级管理员
             if (digest.equals(superDigest)) {
                 cnxn.addAuthInfo(new Id("super", ""));
             }

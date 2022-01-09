@@ -48,6 +48,7 @@ import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.server.RequestProcessor;
 import org.apache.zookeeper.server.ZooKeeperCriticalThread;
 import org.apache.zookeeper.server.quorum.QuorumPeer.LearnerType;
+import org.apache.zookeeper.server.quorum.flexible.QuorumMaj;
 import org.apache.zookeeper.server.quorum.flexible.QuorumVerifier;
 import org.apache.zookeeper.server.util.SerializeUtils;
 import org.apache.zookeeper.server.util.ZxidUtils;
@@ -101,8 +102,7 @@ public class Leader {
     volatile LearnerCnxAcceptor cnxAcceptor = null;
 
     // list of all the followers
-    private final HashSet<LearnerHandler> learners =
-        new HashSet<LearnerHandler>();
+    private final HashSet<LearnerHandler> learners = new HashSet<LearnerHandler>();
 
     private final BufferStats proposalStats;
 
@@ -391,6 +391,7 @@ public class Leader {
                     Socket s = null;
                     boolean error = false;
                     try {
+                        // 开启 Socket 连接
                         s = ss.accept();
 
                         // start with the initLimit, once the ack is processed
@@ -398,15 +399,18 @@ public class Leader {
                         s.setSoTimeout(self.tickTime * self.initLimit);
                         s.setTcpNoDelay(nodelay);
 
-                        BufferedInputStream is = new BufferedInputStream(
-                                s.getInputStream());
+                        BufferedInputStream is = new BufferedInputStream(s.getInputStream());
                         LearnerHandler fh = new LearnerHandler(s, is, Leader.this);
+                        /**
+                         * 该线程将从对等方接收数据包并对其进行处理,同时还会侦听来自新对等方的新连接
+                         * 只要有一个 Socket 连接,那么就会开启一个线程 LearnerHandler 线程
+                         * @see LearnerHandler#run()
+                         */
                         fh.start();
                     } catch (SocketException e) {
                         error = true;
                         if (stop) {
-                            LOG.info("exception while shutting down acceptor: "
-                                    + e);
+                            LOG.info("exception while shutting down acceptor: " + e);
 
                             // When Leader.shutdown() calls ss.close(),
                             // the call to accept throws an exception.
@@ -461,8 +465,7 @@ public class Leader {
         self.end_fle = Time.currentElapsedTime();
         long electionTimeTaken = self.end_fle - self.start_fle;
         self.setElectionTimeTaken(electionTimeTaken);
-        LOG.info("LEADING - LEADER ELECTION TOOK - {} {}", electionTimeTaken,
-                QuorumPeer.FLE_TIME_UNIT);
+        LOG.info("LEADING - LEADER ELECTION TOOK - {} {}", electionTimeTaken, QuorumPeer.FLE_TIME_UNIT);
         self.start_fle = 0;
         self.end_fle = 0;
 
@@ -470,13 +473,17 @@ public class Leader {
 
         try {
             self.tick.set(0);
+            // 从快照中导入数据到内存
             zk.loadData();
 
             leaderStateSummary = new StateSummary(self.getCurrentEpoch(), zk.getLastProcessedZxid());
 
-            // Start thread that waits for connection requests from
-            // new followers.
+            // Start thread that waits for connection requests from new followers.
             cnxAcceptor = new LearnerCnxAcceptor();
+            /**
+             * 开启线程,等待来自 follower 的连接请求
+             * @see LearnerCnxAcceptor#run()
+             */
             cnxAcceptor.start();
 
             long epoch = getEpochToPropose(self.getId(), self.getAcceptedEpoch());
@@ -487,13 +494,11 @@ public class Leader {
                 lastProposed = zk.getZxid();
             }
 
-            newLeaderProposal.packet = new QuorumPacket(NEWLEADER, zk.getZxid(),
-                   null, null);
+            newLeaderProposal.packet = new QuorumPacket(NEWLEADER, zk.getZxid(), null, null);
 
 
             if ((newLeaderProposal.packet.getZxid() & 0xffffffffL) != 0) {
-                LOG.info("NEWLEADER proposal has Zxid of "
-                        + Long.toHexString(newLeaderProposal.packet.getZxid()));
+                LOG.info("NEWLEADER proposal has Zxid of " + Long.toHexString(newLeaderProposal.packet.getZxid()));
             }
 
             QuorumVerifier lastSeenQV = self.getLastSeenQuorumVerifier();
@@ -542,8 +547,7 @@ public class Leader {
              try {
                  waitForNewLeaderAck(self.getId(), zk.getZxid());
              } catch (InterruptedException e) {
-                 shutdown("Waiting for a quorum of followers, only synced with sids: [ "
-                         + newLeaderProposal.ackSetsToString() + " ]");
+                 shutdown("Waiting for a quorum of followers, only synced with sids: [ " + newLeaderProposal.ackSetsToString() + " ]");
                  HashSet<Long> followerSet = new HashSet<Long>();
 
                  for(LearnerHandler f : getLearners()) {
@@ -559,12 +563,12 @@ public class Leader {
                      }
                  }                  
                  if (initTicksShouldBeIncreased) {
-                     LOG.warn("Enough followers present. "+
-                             "Perhaps the initTicks need to be increased.");
+                     LOG.warn("Enough followers present. " + "Perhaps the initTicks need to be increased.");
                  }
                  return;
              }
 
+             // 开启ZK服务端
              startZkServer();
              
             /**
@@ -624,10 +628,8 @@ public class Leader {
                     SyncedLearnerTracker syncedAckSet = new SyncedLearnerTracker();
                     syncedAckSet.addQuorumVerifier(self.getQuorumVerifier());
                     if (self.getLastSeenQuorumVerifier() != null
-                            && self.getLastSeenQuorumVerifier().getVersion() > self
-                                    .getQuorumVerifier().getVersion()) {
-                        syncedAckSet.addQuorumVerifier(self
-                                .getLastSeenQuorumVerifier());
+                            && self.getLastSeenQuorumVerifier().getVersion() > self.getQuorumVerifier().getVersion()) {
+                        syncedAckSet.addQuorumVerifier(self.getLastSeenQuorumVerifier());
                     }
 
                     syncedAckSet.addAck(self.getId());
@@ -645,11 +647,11 @@ public class Leader {
                         break;
                     }
 
+                    // 过半验证
                     if (!tickSkip && !syncedAckSet.hasAllQuorums()) {
                         // Lost quorum of last committed and/or last proposed
                         // config, set shutdown flag
-                        shutdownMessage = "Not sufficient followers synced, only synced with sids: [ "
-                                + syncedAckSet.ackSetsToString() + " ]";
+                        shutdownMessage = "Not sufficient followers synced, only synced with sids: [ " + syncedAckSet.ackSetsToString() + " ]";
                         break;
                     }
                     tickSkip = !tickSkip;
@@ -658,6 +660,7 @@ public class Leader {
                     f.ping();
                 }
             }
+
             if (shutdownMessage != null) {
                 shutdown(shutdownMessage);
                 // leader goes in looking state
@@ -764,28 +767,29 @@ public class Leader {
      * @return True if committed, otherwise false.
      **/
     synchronized public boolean tryToCommit(Proposal p, long zxid, SocketAddress followerAddr) {       
-       // make sure that ops are committed in order. With reconfigurations it is now possible
-       // that different operations wait for different sets of acks, and we still want to enforce
-       // that they are committed in order. Currently we only permit one outstanding reconfiguration
-       // such that the reconfiguration and subsequent outstanding ops proposed while the reconfig is
-       // pending all wait for a quorum of old and new config, so it's not possible to get enough acks
-       // for an operation without getting enough acks for preceding ops. But in the future if multiple
-       // concurrent reconfigs are allowed, this can happen.
-       if (outstandingProposals.containsKey(zxid - 1)) return false;
+        // make sure that ops are committed in order. With reconfigurations it is now possible
+        // that different operations wait for different sets of acks, and we still want to enforce
+        // that they are committed in order. Currently we only permit one outstanding reconfiguration
+        // such that the reconfiguration and subsequent outstanding ops proposed while the reconfig is
+        // pending all wait for a quorum of old and new config, so it's not possible to get enough acks
+        // for an operation without getting enough acks for preceding ops. But in the future if multiple
+        // concurrent reconfigs are allowed, this can happen.
+        if (outstandingProposals.containsKey(zxid - 1)) {
+            return false;
+        }
        
-       // in order to be committed, a proposal must be accepted by a quorum.
-       //
-       // getting a quorum from all necessary configurations.
+        // in order to be committed, a proposal must be accepted by a quorum.
+        //
+        // getting a quorum from all necessary configurations.
+        // 过半机制的验证
         if (!p.hasAllQuorums()) {
-           return false;                 
+            return false;
         }
         
         // commit proposals in order
-        if (zxid != lastCommitted+1) {    
-           LOG.warn("Commiting zxid 0x" + Long.toHexString(zxid)
-                    + " from " + followerAddr + " not first!");
-            LOG.warn("First is "
-                    + (lastCommitted+1));
+        if (zxid != lastCommitted+1) {
+            LOG.warn("Commiting zxid 0x" + Long.toHexString(zxid) + " from " + followerAddr + " not first!");
+            LOG.warn("First is " + (lastCommitted+1));
         }     
         
         outstandingProposals.remove(zxid);
@@ -817,11 +821,15 @@ public class Leader {
             // we're sending the designated leader, and if the leader is changing the followers are 
             // responsible for closing the connection - this way we are sure that at least a majority of them 
             // receive the commit message.
+            // 提交
             commitAndActivate(zxid, designatedLeader);
+            // 通知
             informAndActivate(p, designatedLeader);
             //turnOffFollowers();
         } else {
+            // 提交
             commit(zxid);
+            // 通知
             inform(p);
         }
         zk.commitProcessor.commit(p.request);
@@ -842,15 +850,18 @@ public class Leader {
      * @param sid, the id of the server that sent the ack
      * @param followerAddr
      */
-    synchronized public void processAck(long sid, long zxid, SocketAddress followerAddr) {        
-        if (!allowedToCommit) return; // last op committed was a leader change - from now on 
-                                     // the new leader should commit        
+    synchronized public void processAck(long sid, long zxid, SocketAddress followerAddr) {
+        // last op committed was a leader change - from now on
+        // the new leader should commit
+        if (!allowedToCommit) {
+            return;
+        }
+
         if (LOG.isTraceEnabled()) {
             LOG.trace("Ack zxid: 0x{}", Long.toHexString(zxid));
             for (Proposal p : outstandingProposals.values()) {
                 long packetZxid = p.packet.getZxid();
-                LOG.trace("outstanding proposal: 0x{}",
-                        Long.toHexString(packetZxid));
+                LOG.trace("outstanding proposal: 0x{}", Long.toHexString(packetZxid));
             }
             LOG.trace("outstanding proposals all");
         }
@@ -873,25 +884,27 @@ public class Leader {
         }
         if (lastCommitted >= zxid) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("proposal has already been committed, pzxid: 0x{} zxid: 0x{}",
-                        Long.toHexString(lastCommitted), Long.toHexString(zxid));
+                LOG.debug("proposal has already been committed, pzxid: 0x{} zxid: 0x{}", Long.toHexString(lastCommitted), Long.toHexString(zxid));
             }
             // The proposal has already been committed
             return;
         }
+        // 从 outstandingProposals 中获取提议,根据事务 ID 获取
         Proposal p = outstandingProposals.get(zxid);
         if (p == null) {
-            LOG.warn("Trying to commit future proposal: zxid 0x{} from {}",
-                    Long.toHexString(zxid), followerAddr);
+            LOG.warn("Trying to commit future proposal: zxid 0x{} from {}", Long.toHexString(zxid), followerAddr);
             return;
         }
-        
-        p.addAck(sid);        
-        /*if (LOG.isDebugEnabled()) {
-            LOG.debug("Count for zxid: 0x{} is {}",
-                    Long.toHexString(zxid), p.ackSet.size());
-        }*/
-        
+
+        // 添加 Foloower 服务器的 sid
+        p.addAck(sid);
+        /**
+         * if (LOG.isDebugEnabled()) {
+         *     LOG.debug("Count for zxid: 0x{} is {}", Long.toHexString(zxid), p.ackSet.size());
+         * }
+         */
+
+        // 尝试提交
         boolean hasCommitted = tryToCommit(p, zxid, followerAddr);
 
         // If p is a reconfiguration, multiple other operations may be ready to be committed,
@@ -903,13 +916,15 @@ public class Leader {
        // concurrent reconfigs are allowed, this can happen and then we need to check whether some pending
         // ops may already have enough acks and can be committed, which is what this code does.
 
-        if (hasCommitted && p.request!=null && p.request.getHdr().getType() == OpCode.reconfig){
-               long curZxid = zxid;
-           while (allowedToCommit && hasCommitted && p!=null){
-               curZxid++;
-               p = outstandingProposals.get(curZxid);
-               if (p !=null) hasCommitted = tryToCommit(p, curZxid, null);             
-           }
+        if (hasCommitted && p.request!=null && p.request.getHdr().getType() == OpCode.reconfig) {
+            long curZxid = zxid;
+            while (allowedToCommit && hasCommitted && p!=null){
+                curZxid++;
+                p = outstandingProposals.get(curZxid);
+                if (p !=null) {
+                    hasCommitted = tryToCommit(p, curZxid, null);
+                }
+            }
         }
     }
     
@@ -1009,10 +1024,12 @@ public class Leader {
      * @param zxid
      */
     public void commit(long zxid) {
-        synchronized(this){
+        synchronized(this) {
             lastCommitted = zxid;
         }
+        // 组装 COMMIT 包信息
         QuorumPacket qp = new QuorumPacket(Leader.COMMIT, zxid, null, null);
+        // 发送包信息
         sendPacket(qp);
     }
 
@@ -1024,7 +1041,7 @@ public class Leader {
         
         byte data[] = new byte[8];
         ByteBuffer buffer = ByteBuffer.wrap(data);                            
-       buffer.putLong(designatedLeader);
+        buffer.putLong(designatedLeader);
        
         QuorumPacket qp = new QuorumPacket(Leader.COMMITANDACTIVATE, zxid, data, null);
         sendPacket(qp);
@@ -1034,8 +1051,9 @@ public class Leader {
      * Create an inform packet and send it to all observers.
      */
     public void inform(Proposal proposal) {
-        QuorumPacket qp = new QuorumPacket(Leader.INFORM, proposal.request.zxid,
-                                            proposal.packet.getData(), null);
+        // 组装 INFORM 包信息
+        QuorumPacket qp = new QuorumPacket(Leader.INFORM, proposal.request.zxid, proposal.packet.getData(), null);
+        // 发送包信息给 Observer
         sendObserverPacket(qp);
     }
 
@@ -1044,12 +1062,12 @@ public class Leader {
      * Create an inform&activate packet and send it to all observers.
      */
     public void informAndActivate(Proposal proposal, long designatedLeader) {
-       byte[] proposalData = proposal.packet.getData();
+        byte[] proposalData = proposal.packet.getData();
         byte[] data = new byte[proposalData.length + 8];
-        ByteBuffer buffer = ByteBuffer.wrap(data);                            
-       buffer.putLong(designatedLeader);
-       buffer.put(proposalData);
-       
+        ByteBuffer buffer = ByteBuffer.wrap(data);
+        buffer.putLong(designatedLeader);
+        buffer.put(proposalData);
+
         QuorumPacket qp = new QuorumPacket(Leader.INFORMANDACTIVATE, proposal.request.zxid, data, null);
         sendObserverPacket(qp);
     }
@@ -1085,14 +1103,14 @@ public class Leader {
          * election. Force a re-election instead. See ZOOKEEPER-1277
          */
         if ((request.zxid & 0xffffffffL) == 0xffffffffL) {
-            String msg =
-                    "zxid lower 32 bits have rolled over, forcing re-election, and therefore new epoch start";
+            String msg = "zxid lower 32 bits have rolled over, forcing re-election, and therefore new epoch start";
             shutdown(msg);
             throw new XidRolloverException(msg);
         }
 
         byte[] data = SerializeUtils.serializeRequest(request);
         proposalStats.setLastBufferSize(data.length);
+        // 组装发送请求 --- PROPOSAL 提议
         QuorumPacket pp = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
 
         Proposal p = new Proposal();
@@ -1116,6 +1134,7 @@ public class Leader {
 
             lastProposed = p.packet.getZxid();
             outstandingProposals.put(lastProposed, p);
+            // 发送提议
             sendPacket(pp);
         }
         return p;
@@ -1160,8 +1179,8 @@ public class Leader {
      * @return last proposed zxid
      * @throws InterruptedException 
      */
-    synchronized public long startForwarding(LearnerHandler handler,
-            long lastSeenZxid) {
+    synchronized public long startForwarding(LearnerHandler handler, long lastSeenZxid) {
+
         // Queue up any outstanding requests enabling the receipt of
         // new requests
         if (lastProposed > lastSeenZxid) {
@@ -1172,8 +1191,7 @@ public class Leader {
                 handler.queuePacket(p.packet);
                 // Since the proposal has been committed we need to send the
                 // commit message also
-                QuorumPacket qp = new QuorumPacket(Leader.COMMIT, p.packet
-                        .getZxid(), null, null);
+                QuorumPacket qp = new QuorumPacket(Leader.COMMIT, p.packet.getZxid(), null, null);
                 handler.queuePacket(qp);
             }
             // Only participant need to get outstanding proposals
@@ -1199,27 +1217,36 @@ public class Leader {
     // VisibleForTesting
     protected final Set<Long> connectingFollowers = new HashSet<Long>();
     public long getEpochToPropose(long sid, long lastAcceptedEpoch) throws InterruptedException, IOException {
+
         synchronized(connectingFollowers) {
             if (!waitingForNewEpoch) {
                 return epoch;
             }
+            // 线程接收 Follower & Observer,epoch 为最大值 + 1
             if (lastAcceptedEpoch >= epoch) {
-                epoch = lastAcceptedEpoch+1;
+                epoch = lastAcceptedEpoch + 1;
             }
+            // 判断是否为参与者,这里包含了所有服务器,包括: Leader,Follower,Observer
             if (isParticipant(sid)) {
                 connectingFollowers.add(sid);
             }
             QuorumVerifier verifier = self.getQuorumVerifier();
-            if (connectingFollowers.contains(self.getId()) &&
-                                            verifier.containsQuorum(connectingFollowers)) {
+            /**
+             * containsQuorum(): 校验过半机制
+             * @see QuorumMaj#containsQuorum(java.util.Set)
+             */
+            if (connectingFollowers.contains(self.getId())
+                    && verifier.containsQuorum(connectingFollowers)) {
                 waitingForNewEpoch = false;
                 self.setAcceptedEpoch(epoch);
+                // 唤醒
                 connectingFollowers.notifyAll();
             } else {
                 long start = Time.currentElapsedTime();
                 long cur = start;
                 long end = start + self.getInitLimit()*self.getTickTime();
                 while(waitingForNewEpoch && cur < end) {
+                    // 等待
                     connectingFollowers.wait(end - cur);
                     cur = Time.currentElapsedTime();
                 }
@@ -1227,6 +1254,7 @@ public class Leader {
                     throw new InterruptedException("Timeout while waiting for epoch from quorum");
                 }
             }
+            // 返回最大的 Epoch
             return epoch;
         }
     }
@@ -1313,7 +1341,7 @@ public class Leader {
         if (designatedLeader != self.getId()) {
             allowedToCommit = false;
         }
-        
+        // 启动
         zk.startup();
         /*
          * Update the election vote here to ensure that all members of the
@@ -1432,6 +1460,10 @@ public class Leader {
     }
 
     private boolean isParticipant(long sid) {
+        /**
+         * Map 对象 votingMembers 记录是在, initializeAndRun 方法中的 config.parse(args[0]) 完成插入数据的
+         * @see QuorumPeerMain#initializeAndRun(java.lang.String[])
+         */
         return self.getQuorumVerifier().getVotingMembers().containsKey(sid);
     }
 }

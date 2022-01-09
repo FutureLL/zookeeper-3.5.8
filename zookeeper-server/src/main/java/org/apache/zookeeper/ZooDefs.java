@@ -90,17 +90,23 @@ public class ZooDefs {
 
     @InterfaceAudience.Public
     public interface Perms {
-        int READ = 1 << 0;
+       // 1
+       int READ = 1 << 0;
 
-        int WRITE = 1 << 1;
+       // 2
+       int WRITE = 1 << 1;
 
-        int CREATE = 1 << 2;
+       // 4
+       int CREATE = 1 << 2;
 
-        int DELETE = 1 << 3;
+       // 8
+       int DELETE = 1 << 3;
 
-        int ADMIN = 1 << 4;
+       // 16
+       int ADMIN = 1 << 4;
 
-        int ALL = READ | WRITE | CREATE | DELETE | ADMIN;
+       // 31
+       int ALL = READ | WRITE | CREATE | DELETE | ADMIN;
     }
 
     @InterfaceAudience.Public

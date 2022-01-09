@@ -22,6 +22,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.Parser;
 import org.apache.commons.cli.PosixParser;
+import org.apache.zookeeper.ClientCnxn;
 
 /**
  * addAuth command for cli
@@ -60,6 +61,10 @@ public class AddAuthCommand extends CliCommand {
             b = args[2].getBytes();
         }
 
+        /**
+         * 添加验证信息
+         * @see ClientCnxn#addAuthInfo(java.lang.String, byte[])
+         */
         zk.addAuthInfo(args[1], b);
 
         return false;

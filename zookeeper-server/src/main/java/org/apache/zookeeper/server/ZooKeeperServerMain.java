@@ -53,7 +53,24 @@ public class ZooKeeperServerMain {
 
     private AdminServer adminServer;
 
-    /*
+    /**
+     * 单机模式调用
+     * TODO 服务端启动
+     *
+     * 服务端接收请求顺序:【当 ZK 服务端接收到命令时: create /xxx】
+     * 1. 创建事务日志
+     * 2. 快照,DataBase[层级结构如下]
+     *    DataBase
+     *      DataTree
+     *        DataNode
+     * 3. 更新内存,操作 DataTree
+     * 4. 返回错误/正确信息
+     *
+     * 其中包括两个持久化: 日志持久化,快照持久化
+     *
+     * 服务器启动的时候:
+     * 1. 从文件中取数据,加载到内存[快照中的文件数据 DataBase,加载到内存中]
+     *
      * Start up the ZooKeeper server.
      *
      * @param args the configfile or the port datadir [ticktime]
@@ -87,22 +104,24 @@ public class ZooKeeperServerMain {
         System.exit(0);
     }
 
-    protected void initializeAndRun(String[] args)
-        throws ConfigException, IOException, AdminServerException
-    {
+    protected void initializeAndRun(String[] args) throws ConfigException, IOException, AdminServerException {
         try {
+            // 初始化 log4j
             ManagedUtil.registerLog4jMBeans();
         } catch (JMException e) {
             LOG.warn("Unable to register log4j JMX control", e);
         }
 
+        // ZK 单机模式的配置类
         ServerConfig config = new ServerConfig();
         if (args.length == 1) {
+            // 解析
             config.parse(args[0]);
         } else {
             config.parse(args);
         }
 
+        // 运行配置
         runFromConfig(config);
     }
 
@@ -112,8 +131,7 @@ public class ZooKeeperServerMain {
      * @throws IOException
      * @throws AdminServerException
      */
-    public void runFromConfig(ServerConfig config)
-            throws IOException, AdminServerException {
+    public void runFromConfig(ServerConfig config) throws IOException, AdminServerException {
         LOG.info("Starting server");
         FileTxnSnapLog txnLog = null;
         try {
@@ -121,16 +139,16 @@ public class ZooKeeperServerMain {
             // so rather than spawning another thread, we will just call
             // run() in this thread.
             // create a file logger url from the command line args
+            // 工具类: 传入日志目录及数据目录
             txnLog = new FileTxnSnapLog(config.dataLogDir, config.dataDir);
-            final ZooKeeperServer zkServer = new ZooKeeperServer(txnLog,
-                    config.tickTime, config.minSessionTimeout, config.maxSessionTimeout, null);
+            // 启动 ZookeeperServer
+            final ZooKeeperServer zkServer = new ZooKeeperServer(txnLog, config.tickTime, config.minSessionTimeout, config.maxSessionTimeout, null);
             txnLog.setServerStats(zkServer.serverStats());
 
             // Registers shutdown handler which will be used to know the
             // server error or shutdown state changes.
             final CountDownLatch shutdownLatch = new CountDownLatch(1);
-            zkServer.registerServerShutdownHandler(
-                    new ZooKeeperServerShutdownHandler(shutdownLatch));
+            zkServer.registerServerShutdownHandler(new ZooKeeperServerShutdownHandler(shutdownLatch));
 
             // Start Admin server
             adminServer = AdminServerFactory.createAdminServer();
@@ -139,8 +157,17 @@ public class ZooKeeperServerMain {
 
             boolean needStartZKServer = true;
             if (config.getClientPortAddress() != null) {
+                // 获取建立 Socket 工厂,工厂方法模式
                 cnxnFactory = ServerCnxnFactory.createFactory();
+                /**
+                 * 建立 Socket 时,默认 NIOServerCnxnFactory (是一个线程)【3.4.12版本 NIOServerCnxnFactory 实现了 Runnable】
+                 * 3.5.8版本之后,创建了一个 AcceptThread 线程,在调用下边 startup() 方法时启动 AcceptThread.start() 启动线程
+                 * @see NIOServerCnxnFactory#start()
+                 */
                 cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), false);
+                /**
+                 * @see NIOServerCnxnFactory#startup(org.apache.zookeeper.server.ZooKeeperServer, boolean)
+                 */
                 cnxnFactory.startup(zkServer);
                 // zkServer has been started. So we don't need to start it again in secureCnxnFactory.
                 needStartZKServer = false;

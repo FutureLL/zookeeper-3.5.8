@@ -39,10 +39,14 @@ public class ProposalRequestProcessor implements RequestProcessor {
 
     SyncRequestProcessor syncProcessor;
 
-    public ProposalRequestProcessor(LeaderZooKeeperServer zks,
-            RequestProcessor nextProcessor) {
+    public ProposalRequestProcessor(LeaderZooKeeperServer zks, RequestProcessor nextProcessor) {
         this.zks = zks;
         this.nextProcessor = nextProcessor;
+        /**
+         * 接收 Ack 处理器,接收 Follower 发送的 Ack
+         * @see AckRequestProcessor#processRequest(org.apache.zookeeper.server.Request)
+         * @see SendAckRequestProcessor#processRequest(org.apache.zookeeper.server.Request)
+         */
         AckRequestProcessor ackProcessor = new AckRequestProcessor(zks.getLeader());
         syncProcessor = new SyncRequestProcessor(zks, ackProcessor);
     }
@@ -51,6 +55,9 @@ public class ProposalRequestProcessor implements RequestProcessor {
      * initialize this processor
      */
     public void initialize() {
+        /**
+         * @see SyncRequestProcessor#run()
+         */
         syncProcessor.start();
     }
 
@@ -71,14 +78,22 @@ public class ProposalRequestProcessor implements RequestProcessor {
         if (request instanceof LearnerSyncRequest){
             zks.getLeader().processSync((LearnerSyncRequest)request);
         } else {
+            /**
+             * @see CommitProcessor#processrequest(org.apache.zookeeper.server.Request)
+             */
             nextProcessor.processRequest(request);
             if (request.getHdr() != null) {
                 // We need to sync and get consensus on any transactions
                 try {
+                    // 提出议案进行投票
                     zks.getLeader().propose(request);
                 } catch (XidRolloverException e) {
                     throw new RequestProcessorException(e.getMessage(), e);
                 }
+                /**
+                 * 持久化
+                 * @see SyncRequestProcessor#processRequest(org.apache.zookeeper.server.Request)
+                 */
                 syncProcessor.processRequest(request);
             }
         }

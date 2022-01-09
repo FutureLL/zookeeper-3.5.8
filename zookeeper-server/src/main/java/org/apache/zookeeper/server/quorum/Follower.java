@@ -66,30 +66,35 @@ public class Follower extends Learner{
         self.end_fle = Time.currentElapsedTime();
         long electionTimeTaken = self.end_fle - self.start_fle;
         self.setElectionTimeTaken(electionTimeTaken);
-        LOG.info("FOLLOWING - LEADER ELECTION TOOK - {} {}", electionTimeTaken,
-                QuorumPeer.FLE_TIME_UNIT);
+        LOG.info("FOLLOWING - LEADER ELECTION TOOK - {} {}", electionTimeTaken, QuorumPeer.FLE_TIME_UNIT);
         self.start_fle = 0;
         self.end_fle = 0;
         fzk.registerJMX(new FollowerBean(this, zk), self.jmxLocalPeerBean);
         try {
+            // 找到 Leader,前提是领导者选举完成,findLeader() 这个方法就能找到 Leader
             QuorumServer leaderServer = findLeader();            
             try {
+                // Follower 连接 Leader
                 connectToLeader(leaderServer.addr, leaderServer.hostname);
+                // 一旦连接到领导者,执行握手协议以建立 following 或 observing 连接
+                // newEpochZxid: 在本轮选举中,当前服务器存储的最新的 Epoch
                 long newEpochZxid = registerWithLeader(Leader.FOLLOWERINFO);
-                if (self.isReconfigStateChange())
-                   throw new Exception("learned about role change");
+                if (self.isReconfigStateChange()) {
+                    throw new Exception("learned about role change");
+                }
                 //check to see if the leader zxid is lower than ours
                 //this should never happen but is just a safety check
                 long newEpoch = ZxidUtils.getEpochFromZxid(newEpochZxid);
                 if (newEpoch < self.getAcceptedEpoch()) {
-                    LOG.error("Proposed leader epoch " + ZxidUtils.zxidToString(newEpochZxid)
-                            + " is less than our accepted epoch " + ZxidUtils.zxidToString(self.getAcceptedEpoch()));
+                    LOG.error("Proposed leader epoch " + ZxidUtils.zxidToString(newEpochZxid) + " is less than our accepted epoch " + ZxidUtils.zxidToString(self.getAcceptedEpoch()));
                     throw new IOException("Error: Epoch of leader is lower");
                 }
+                // 将历史记录与 Leader 同步
                 syncWithLeader(newEpochZxid);                
                 QuorumPacket qp = new QuorumPacket();
                 while (this.isRunning()) {
                     readPacket(qp);
+                    // 循环监听,Leader 传递给 Follower 的信息
                     processPacket(qp);
                 }
             } catch (Exception e) {
@@ -118,14 +123,13 @@ public class Follower extends Learner{
         case Leader.PING:            
             ping(qp);            
             break;
+        // 接收 Leader 提议请求
         case Leader.PROPOSAL:           
             TxnHeader hdr = new TxnHeader();
+            // 反序列化获取数据
             Record txn = SerializeUtils.deserializeTxn(qp.getData(), hdr);
             if (hdr.getZxid() != lastQueued + 1) {
-                LOG.warn("Got zxid 0x"
-                        + Long.toHexString(hdr.getZxid())
-                        + " expected 0x"
-                        + Long.toHexString(lastQueued + 1));
+                LOG.warn("Got zxid 0x" + Long.toHexString(hdr.getZxid()) + " expected 0x" + Long.toHexString(lastQueued + 1));
             }
             lastQueued = hdr.getZxid();
             
@@ -134,7 +138,8 @@ public class Follower extends Learner{
                QuorumVerifier qv = self.configFromString(new String(setDataTxn.getData()));
                self.setLastSeenQuorumVerifier(qv, true);                               
             }
-            
+
+            // 持久化&发送 Ack
             fzk.logRequest(hdr, txn);
             break;
         case Leader.COMMIT:
@@ -150,8 +155,7 @@ public class Follower extends Learner{
            // get new designated leader from (current) leader's message
            ByteBuffer buffer = ByteBuffer.wrap(qp.getData());    
            long suggestedLeaderId = buffer.getLong();
-            boolean majorChange = 
-                   self.processReconfig(qv, suggestedLeaderId, qp.getZxid(), true);
+            boolean majorChange = self.processReconfig(qv, suggestedLeaderId, qp.getZxid(), true);
            // commit (writes the new config to ZK tree (/zookeeper/config)                     
            fzk.commit(qp.getZxid());
             if (majorChange) {

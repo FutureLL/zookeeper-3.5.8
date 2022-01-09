@@ -30,8 +30,8 @@ public class PathUtils {
 	 * with a sequential flag
 	 * @throws IllegalArgumentException if the path is invalid
 	 */
-	public static void validatePath(String path, boolean isSequential) 
-		throws IllegalArgumentException {
+	public static void validatePath(String path, boolean isSequential) throws IllegalArgumentException {
+	    // isSequential: 节点是否连续,在创建节点时就已指定
 		validatePath(isSequential? path + "1": path);
 	}
 	

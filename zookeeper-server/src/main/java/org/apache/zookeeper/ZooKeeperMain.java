@@ -274,28 +274,63 @@ public class ZooKeeperMain {
         System.out.println("\n"+msg);
     }
 
+    /**
+     * 连接 ZK
+     *
+     * @param newHost
+     * @throws InterruptedException
+     * @throws IOException
+     */
     protected void connectToZK(String newHost) throws InterruptedException, IOException {
         if (zk != null && zk.getState().isAlive()) {
             zk.close();
         }
 
         host = newHost;
+        // zk 的另一个模式: 只读模式
         boolean readOnly = cl.getOption("readonly") != null;
+        // 启动 zk 安全机制
         if (cl.getOption("secure") != null) {
             System.setProperty(ZKClientConfig.SECURE_CLIENT, "true");
             System.out.println("Secure connection is enabled");
         }
+        // 初始化 Zookeeper 原生对象
+        // ZooKeeperAdmin 继承了 ZooKeeper
+        /**
+         * 最终调用:
+         * @see org.apache.zookeeper.ZooKeeper#ZooKeeper(java.lang.String, int, org.apache.zookeeper.Watcher, boolean, org.apache.zookeeper.client.HostProvider, org.apache.zookeeper.client.ZKClientConfig)
+         */
         zk = new ZooKeeperAdmin(host, Integer.parseInt(cl.getOption("timeout")), new MyWatcher(), readOnly);
     }
 
+    /**
+     * TODO 客户端启动类
+     *
+     * @param args
+     * @throws IOException
+     * @throws InterruptedException
+     *
+     * 执行 ./zkCli.sh 脚本就需要执行该方法
+     */
     public static void main(String args[]) throws IOException, InterruptedException {
+        // 调用 ZooKeeperMain 构造方法,初始化 ZK
         ZooKeeperMain main = new ZooKeeperMain(args);
+        // 执行
         main.run();
     }
 
+    /**
+     * ZooKeeperMain 构造方法
+     *
+     * @param args
+     * @throws IOException
+     * @throws InterruptedException
+     */
     public ZooKeeperMain(String args[]) throws IOException, InterruptedException {
         cl.parseOptions(args);
         System.out.println("Connecting to " + cl.getOption("server"));
+        // 连接 ZK
+        // 命令行传入的参数 server
         connectToZK(cl.getOption("server"));
     }
 
@@ -310,24 +345,23 @@ public class ZooKeeperMain {
             boolean jlinemissing = false;
             // only use jline if it's in the classpath
             try {
+                // 命令行脚本
                 Class<?> consoleC = Class.forName("jline.console.ConsoleReader");
-                Class<?> completorC =
-                    Class.forName("org.apache.zookeeper.JLineZNodeCompleter");
+                Class<?> completorC = Class.forName("org.apache.zookeeper.JLineZNodeCompleter");
 
                 System.out.println("JLine support is enabled");
 
-                Object console =
-                    consoleC.getConstructor().newInstance();
+                Object console = consoleC.getConstructor().newInstance();
 
-                Object completor =
-                    completorC.getConstructor(ZooKeeper.class).newInstance(zk);
-                Method addCompletor = consoleC.getMethod("addCompleter",
-                        Class.forName("jline.console.completer.Completer"));
+                Object completor = completorC.getConstructor(ZooKeeper.class).newInstance(zk);
+                Method addCompletor = consoleC.getMethod("addCompleter", Class.forName("jline.console.completer.Completer"));
                 addCompletor.invoke(console, completor);
 
                 String line;
                 Method readLine = consoleC.getMethod("readLine", String.class);
+                // 获取每一行的命令输入
                 while ((line = (String)readLine.invoke(console, getPrompt())) != null) {
+                    // 执行命令行的输入
                     executeLine(line);
                 }
             } catch (ClassNotFoundException e) {
@@ -349,8 +383,7 @@ public class ZooKeeperMain {
 
             if (jlinemissing) {
                 System.out.println("JLine support is disabled");
-                BufferedReader br =
-                    new BufferedReader(new InputStreamReader(System.in));
+                BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
 
                 String line;
                 while ((line = br.readLine()) != null) {
@@ -364,13 +397,24 @@ public class ZooKeeperMain {
         System.exit(exitCode);
     }
 
+    /**
+     * 执行命令行的输入
+     *
+     * @param line
+     * @throws InterruptedException
+     * @throws IOException
+     */
     public void executeLine(String line) throws InterruptedException, IOException {
-      if (!line.equals("")) {
-        cl.parseCommand(line);
-        addToHistory(commandCount,line);
-        processCmd(cl);
-        commandCount++;
-      }
+        if (!line.equals("")) {
+            // 解析命令
+            cl.parseCommand(line);
+            // 添加到输入历史当中
+            addToHistory(commandCount, line);
+            // 处理命令
+            processCmd(cl);
+            // 行号++
+            commandCount++;
+        }
     }
 
     /**
@@ -581,9 +625,18 @@ public class ZooKeeperMain {
         return true;
     }
 
+    /**
+     * 处理命令
+     *
+     * @param co
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     */
     protected boolean processCmd(MyCommandOptions co) throws IOException, InterruptedException {
         boolean watch = false;
         try {
+            // 处理ZK命令
             watch = processZKCmd(co);
             exitCode = 0;
         } catch (CliException ex) {
@@ -593,6 +646,15 @@ public class ZooKeeperMain {
         return watch;
     }
 
+    /**
+     * 处理ZK命令
+     *
+     * @param co
+     * @return
+     * @throws CliException
+     * @throws IOException
+     * @throws InterruptedException
+     */
     protected boolean processZKCmd(MyCommandOptions co) throws CliException, IOException, InterruptedException {
         String[] args = co.getArgArray();
         String cmd = co.getCommand();
@@ -611,6 +673,7 @@ public class ZooKeeperMain {
 
 
         if (cmd.equals("quit")) {
+            // 如果输入命令为 quit
             zk.close();
             System.exit(exitCode);
         } else if (cmd.equals("redo") && args.length >= 2) {
@@ -650,9 +713,15 @@ public class ZooKeeperMain {
         }
         
         // execute from commandMap
+        /**
+         * 解析并执行处理对应命令
+         * 例如:
+         * @see org.apache.zookeeper.cli.CreateCommand
+         */
         CliCommand cliCmd = commandMapCli.get(cmd);
         if(cliCmd != null) {
             cliCmd.setZk(zk);
+            // exec(): 执行命令
             watch = cliCmd.parse(args).exec();
         } else if (!commandMap.containsKey(cmd)) {
              usage();

@@ -124,15 +124,23 @@ public interface Watcher {
 
         /**
          * Enumeration of types of events that may occur on the ZooKeeper
+         * 事件类型
          */
         @InterfaceAudience.Public
         public enum EventType {
+            // 无任何状态类型
             None (-1),
+            // 节点创建
             NodeCreated (1),
+            // 节点删除
             NodeDeleted (2),
+            // 节点变更
             NodeDataChanged (3),
+            // 子节点变更
             NodeChildrenChanged (4),
+            // Watcher 被删除时触发
             DataWatchRemoved (5),
+            // 子节点 Watcher 被删除时触发
             ChildWatchRemoved (6);
 
             private final int intValue;     // Integer representation of value

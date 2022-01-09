@@ -76,8 +76,7 @@ public abstract class ServerCnxnFactory {
         configure(addr, maxcc, false);
     }
 
-    public abstract void configure(InetSocketAddress addr, int maxcc, boolean secure)
-            throws IOException;
+    public abstract void configure(InetSocketAddress addr, int maxcc, boolean secure) throws IOException;
 
     public abstract void reconfigure(InetSocketAddress addr);
 
@@ -110,6 +109,7 @@ public abstract class ServerCnxnFactory {
     public abstract void start();
 
     protected ZooKeeperServer zkServer;
+
     final public void setZooKeeperServer(ZooKeeperServer zks) {
         this.zkServer = zks;
         if (zks != null) {
@@ -122,21 +122,26 @@ public abstract class ServerCnxnFactory {
     }
 
     public abstract void closeAll();
-    
+
+    /**
+     * 获取建立 Socket 工厂,工厂方法模式
+     *
+     * @return
+     * @throws IOException
+     */
     static public ServerCnxnFactory createFactory() throws IOException {
-        String serverCnxnFactoryName =
-            System.getProperty(ZOOKEEPER_SERVER_CNXN_FACTORY);
+
+        String serverCnxnFactoryName = System.getProperty(ZOOKEEPER_SERVER_CNXN_FACTORY);
+        // 默认使用 NIOServerCnxnFactory
         if (serverCnxnFactoryName == null) {
             serverCnxnFactoryName = NIOServerCnxnFactory.class.getName();
         }
         try {
-            ServerCnxnFactory serverCnxnFactory = (ServerCnxnFactory) Class.forName(serverCnxnFactoryName)
-                    .getDeclaredConstructor().newInstance();
+            ServerCnxnFactory serverCnxnFactory = (ServerCnxnFactory) Class.forName(serverCnxnFactoryName).getDeclaredConstructor().newInstance();
             LOG.info("Using {} as server connection factory", serverCnxnFactoryName);
             return serverCnxnFactory;
         } catch (Exception e) {
-            IOException ioe = new IOException("Couldn't instantiate "
-                    + serverCnxnFactoryName);
+            IOException ioe = new IOException("Couldn't instantiate " + serverCnxnFactoryName);
             ioe.initCause(e);
             throw ioe;
         }

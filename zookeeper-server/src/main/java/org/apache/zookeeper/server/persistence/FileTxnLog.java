@@ -175,7 +175,9 @@ public class FileTxnLog implements TxnLog, Closeable {
      */
     public synchronized void rollLog() throws IOException {
         if (logStream != null) {
+            // 刷新流
             this.logStream.flush();
+            // 赋空值 --- 相当于再生成一个文件
             this.logStream = null;
             oa = null;
         }
@@ -200,16 +202,12 @@ public class FileTxnLog implements TxnLog, Closeable {
      * @param txn the transaction part of the entry
      * returns true iff something appended, otw false
      */
-    public synchronized boolean append(TxnHeader hdr, Record txn)
-        throws IOException
-    {
+    public synchronized boolean append(TxnHeader hdr, Record txn) throws IOException {
         if (hdr == null) {
             return false;
         }
         if (hdr.getZxid() <= lastZxidSeen) {
-            LOG.warn("Current zxid " + hdr.getZxid()
-                    + " is <= " + lastZxidSeen + " for "
-                    + hdr.getType());
+            LOG.warn("Current zxid " + hdr.getZxid() + " is <= " + lastZxidSeen + " for " + hdr.getType());
         } else {
             lastZxidSeen = hdr.getZxid();
         }
@@ -217,9 +215,10 @@ public class FileTxnLog implements TxnLog, Closeable {
            if(LOG.isInfoEnabled()){
                 LOG.info("Creating new log file: " + Util.makeLogName(hdr.getZxid()));
            }
-
+           // logDir: 配置文件指定目录
            logFileWrite = new File(logDir, Util.makeLogName(hdr.getZxid()));
            fos = new FileOutputStream(logFileWrite);
+           // 生成文件所对应的流
            logStream=new BufferedOutputStream(fos);
            oa = BinaryOutputArchive.getArchive(logStream);
            FileHeader fhdr = new FileHeader(TXNLOG_MAGIC,VERSION, dbId);
@@ -232,8 +231,7 @@ public class FileTxnLog implements TxnLog, Closeable {
         filePadding.padFile(fos.getChannel());
         byte[] buf = Util.marshallTxnEntry(hdr, txn);
         if (buf == null || buf.length == 0) {
-            throw new IOException("Faulty serialization for header " +
-                    "and txn");
+            throw new IOException("Faulty serialization for header " + "and txn");
         }
         Checksum crc = makeChecksumAlgorithm();
         crc.update(buf, 0, buf.length);
@@ -320,8 +318,9 @@ public class FileTxnLog implements TxnLog, Closeable {
     }
 
     /**
-     * commit the logs. make sure that everything hits the
-     * disk
+     * commit the logs. make sure that everything hits the disk
+     *
+     * @throws IOException
      */
     public synchronized void commit() throws IOException {
         if (logStream != null) {
@@ -405,7 +404,9 @@ public class FileTxnLog implements TxnLog, Closeable {
             RandomAccessFile raf=new RandomAccessFile(itr.logFile,"rw");
             raf.setLength(pos);
             raf.close();
+            // 获取下一条数据
             while(itr.goToNextLog()) {
+                // 删除数据
                 if (!itr.logFile.delete()) {
                     LOG.warn("Unable to truncate {}", itr.logFile);
                 }

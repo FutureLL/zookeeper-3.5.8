@@ -98,11 +98,15 @@ public class FileTxnSnapLog {
      * snapdir.
      * @param dataDir the transaction directory
      * @param snapDir the snapshot directory
+     *
+     * 完成日志与快照持久化目录的创建,以及是否可写权限验证
      */
     public FileTxnSnapLog(File dataDir, File snapDir) throws IOException {
         LOG.debug("Opening datadir:{} snapDir:{}", dataDir, snapDir);
 
+        // 日志持久化目录
         this.dataDir = new File(dataDir, version + VERSION);
+        // 快照持久化目录
         this.snapDir = new File(snapDir, version + VERSION);
 
         // by default create snap/log dirs, but otherwise complain instead
@@ -154,6 +158,8 @@ public class FileTxnSnapLog {
 
         // check content of transaction log and snapshot dirs if they are two different directories
         // See ZOOKEEPER-2967 for more details
+        // 如果日志目录不等于快照目录,则要验证: 日志目录中是否存在快照文件,
+        // 快照目录中是否存在日志文件,如果存在则抛异常
         if(!this.dataDir.getPath().equals(this.snapDir.getPath())){
             checkLogDir();
             checkSnapDir();
@@ -220,12 +226,14 @@ public class FileTxnSnapLog {
      * @return the highest zxid restored
      * @throws IOException
      */
-    public long restore(DataTree dt, Map<Long, Integer> sessions,
-                        PlayBackListener listener) throws IOException {
+    public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
+
+        // 从快照中反序列化数据
         long deserializeResult = snapLog.deserialize(dt, sessions);
         FileTxnLog txnLog = new FileTxnLog(dataDir);
 
         RestoreFinalizer finalizer = () -> {
+            // 根据事务文件,查找对应事务
             long highestZxid = fastForwardFromEdits(dt, sessions, listener);
             return highestZxid;
         };
@@ -264,8 +272,8 @@ public class FileTxnSnapLog {
      * @return the highest zxid restored.
      * @throws IOException
      */
-    public long fastForwardFromEdits(DataTree dt, Map<Long, Integer> sessions,
-                                     PlayBackListener listener) throws IOException {
+    public long fastForwardFromEdits(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
+
         TxnIterator itr = txnLog.read(dt.lastProcessedZxid+1);
         long highestZxid = dt.lastProcessedZxid;
         TxnHeader hdr;
@@ -336,8 +344,7 @@ public class FileTxnSnapLog {
      * @param sessions the sessions to be restored
      * @param txn the transaction to be applied
      */
-    public void processTransaction(TxnHeader hdr,DataTree dt,
-            Map<Long, Integer> sessions, Record txn)
+    public void processTransaction(TxnHeader hdr,DataTree dt,  Map<Long, Integer> sessions, Record txn)
         throws KeeperException.NoNodeException {
         ProcessTxnResult rc;
         switch (hdr.getType()) {
@@ -396,13 +403,11 @@ public class FileTxnSnapLog {
      * serialized onto disk
      * @throws IOException
      */
-    public void save(DataTree dataTree,
-            ConcurrentHashMap<Long, Integer> sessionsWithTimeouts)
-        throws IOException {
+    public void save(DataTree dataTree, ConcurrentHashMap<Long, Integer> sessionsWithTimeouts) throws IOException {
         long lastZxid = dataTree.lastProcessedZxid;
         File snapshotFile = new File(snapDir, Util.makeSnapshotName(lastZxid));
-        LOG.info("Snapshotting: 0x{} to {}", Long.toHexString(lastZxid),
-                snapshotFile);
+        LOG.info("Snapshotting: 0x{} to {}", Long.toHexString(lastZxid), snapshotFile);
+        // 将 DataTree 序列化到快照日志中
         snapLog.serialize(dataTree, sessionsWithTimeouts, snapshotFile);
 
     }

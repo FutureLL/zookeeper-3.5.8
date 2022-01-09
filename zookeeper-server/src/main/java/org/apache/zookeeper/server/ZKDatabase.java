@@ -84,6 +84,7 @@ public class ZKDatabase {
 
     public static final int commitLogCount = 500;
     protected static int commitLogBuffer = 700;
+    /** 已经提交了且持久化好了的 request */
     protected LinkedList<Proposal> committedLog = new LinkedList<Proposal>();
     protected ReentrantReadWriteLock logLock = new ReentrantReadWriteLock();
     volatile private boolean initialized = false;
@@ -237,6 +238,7 @@ public class ZKDatabase {
      * @throws IOException
      */
     public long loadDataBase() throws IOException {
+        // 恢复快照数据
         long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener);
         initialized = true;
         return zxid;
@@ -268,10 +270,13 @@ public class ZKDatabase {
         WriteLock wl = logLock.writeLock();
         try {
             wl.lock();
+            // committedLog: 已经提交了且持久化好了的 request
+            // 列表值大于500,则移除列表第一条记录,并计算最小提交日志
             if (committedLog.size() > commitLogCount) {
                 committedLog.removeFirst();
                 minCommittedLog = committedLog.getFirst().packet.getZxid();
             }
+            // 列表为空,则将请求的 Zxid 赋值给最大、最小提交日志
             if (committedLog.isEmpty()) {
                 minCommittedLog = request.zxid;
                 maxCommittedLog = request.zxid;
@@ -283,6 +288,7 @@ public class ZKDatabase {
             p.packet = pp;
             p.request = request;
             committedLog.add(p);
+            // 赋值最大的 Zxid
             maxCommittedLog = p.packet.getZxid();
         } finally {
             wl.unlock();
@@ -462,8 +468,7 @@ public class ZKDatabase {
      * @return
      * @throws KeeperException.NoNodeException
      */
-    public byte[] getData(String path, Stat stat, Watcher watcher)
-    throws KeeperException.NoNodeException {
+    public byte[] getData(String path, Stat stat, Watcher watcher) throws KeeperException.NoNodeException {
         return dataTree.getData(path, stat, watcher);
     }
 
@@ -537,6 +542,7 @@ public class ZKDatabase {
             return false;
         }
 
+        // 删除之后重新加载内存
         loadDataBase();
         return true;
     }
@@ -547,7 +553,9 @@ public class ZKDatabase {
      * @throws IOException
      */
     public void deserializeSnapshot(InputArchive ia) throws IOException {
+        // 清理
         clear();
+        // 反序列化快照
         SerializeUtils.deserializeSnapshot(getDataTree(),ia,getSessionWithTimeOuts());
         initialized = true;
     }
@@ -569,6 +577,7 @@ public class ZKDatabase {
      * @return true if the append was succesfull and false if not
      */
     public boolean append(Request si) throws IOException {
+        // 事务日志工具类
         return this.snapLog.append(si);
     }
 

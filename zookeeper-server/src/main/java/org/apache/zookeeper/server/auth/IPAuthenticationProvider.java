@@ -28,9 +28,8 @@ public class IPAuthenticationProvider implements AuthenticationProvider {
         return "ip";
     }
 
-    public KeeperException.Code
-        handleAuthentication(ServerCnxn cnxn, byte[] authData)
-    {
+    public KeeperException.Code handleAuthentication(ServerCnxn cnxn, byte[] authData) {
+        // 这里的 id 为客户端当前的地址信息
         String id = cnxn.getRemoteSocketAddress().getAddress().getHostAddress();
         cnxn.addAuthInfo(new Id(getScheme(), id));
         return KeeperException.Code.OK;

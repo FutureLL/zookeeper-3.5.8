@@ -87,10 +87,20 @@ abstract class ClientCnxnSocket {
         now = Time.currentElapsedTime();
     }
 
+    /**
+     * 距离上一次读取数据的时间
+     *
+     * @return
+     */
     int getIdleRecv() {
         return (int) (now - lastHeard);
     }
 
+    /**
+     * 距离上一次发送数据的时间
+     *
+     * @return
+     */
     int getIdleSend() {
         return (int) (now - lastSend);
     }
@@ -124,6 +134,11 @@ abstract class ClientCnxnSocket {
         incomingBuffer = ByteBuffer.allocate(len);
     }
 
+    /**
+     * 读取连接的结果
+     *
+     * @throws IOException
+     */
     void readConnectResult() throws IOException {
         if (LOG.isTraceEnabled()) {
             StringBuilder buf = new StringBuilder("0x[");
@@ -150,8 +165,8 @@ abstract class ClientCnxnSocket {
         }
 
         this.sessionId = conRsp.getSessionId();
-        sendThread.onConnected(conRsp.getTimeOut(), this.sessionId,
-                conRsp.getPasswd(), isRO);
+        // 读取结果
+        sendThread.onConnected(conRsp.getTimeOut(), this.sessionId, conRsp.getPasswd(), isRO);
     }
 
     abstract boolean isConnected();
@@ -208,9 +223,7 @@ abstract class ClientCnxnSocket {
      * @throws IOException
      * @throws InterruptedException
      */
-    abstract void doTransport(int waitTimeOut, List<Packet> pendingQueue,
-            ClientCnxn cnxn)
-            throws IOException, InterruptedException;
+    abstract void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException;
 
     /**
      * Close the socket.

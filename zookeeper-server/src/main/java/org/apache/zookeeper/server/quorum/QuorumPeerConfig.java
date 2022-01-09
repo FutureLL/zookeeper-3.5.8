@@ -148,7 +148,8 @@ public class QuorumPeerConfig {
             } finally {
                 in.close();
             }
-            
+
+            // 解析 Properties 文件
             parseProperties(cfg);
         } catch (IOException e) {
             throw new ConfigException("Error processing " + path, e);
@@ -200,6 +201,7 @@ public class QuorumPeerConfig {
                            break;
                        }
                    }
+                   // 服务器数量校验
                    lastSeenQuorumVerifier = createQuorumVerifier(dynamicConfigNextCfg, isHierarchical);
                } catch (IOException e) {
                    LOG.warn("NextQuorumVerifier is initiated to null");
@@ -233,8 +235,7 @@ public class QuorumPeerConfig {
      * @throws IOException
      * @throws ConfigException
      */
-    public void parseProperties(Properties zkProp)
-    throws IOException, ConfigException {
+    public void parseProperties(Properties zkProp) throws IOException, ConfigException {
         int clientPort = 0;
         int secureClientPort = 0;
         String clientPortAddress = null;
@@ -361,8 +362,7 @@ public class QuorumPeerConfig {
         // PurgeTxnLog.purge(File, File, int) will not allow to purge less
         // than 3.
         if (snapRetainCount < MIN_SNAP_RETAIN_COUNT) {
-            LOG.warn("Invalid autopurge.snapRetainCount: " + snapRetainCount
-                    + ". Defaulting to " + MIN_SNAP_RETAIN_COUNT);
+            LOG.warn("Invalid autopurge.snapRetainCount: " + snapRetainCount + ". Defaulting to " + MIN_SNAP_RETAIN_COUNT);
             snapRetainCount = MIN_SNAP_RETAIN_COUNT;
         }
 
@@ -379,8 +379,7 @@ public class QuorumPeerConfig {
                 throw new IllegalArgumentException("clientPortAddress is set but clientPort is not set");
             }
         } else if (clientPortAddress != null) {
-            this.clientPortAddress = new InetSocketAddress(
-                    InetAddress.getByName(clientPortAddress), clientPort);
+            this.clientPortAddress = new InetSocketAddress(InetAddress.getByName(clientPortAddress), clientPort);
             LOG.info("clientPortAddress is {}", formatInetAddr(this.clientPortAddress));
         } else {
             this.clientPortAddress = new InetSocketAddress(clientPort);
@@ -393,8 +392,7 @@ public class QuorumPeerConfig {
                 throw new IllegalArgumentException("secureClientPortAddress is set but secureClientPort is not set");
             }
         } else if (secureClientPortAddress != null) {
-            this.secureClientPortAddress = new InetSocketAddress(
-                    InetAddress.getByName(secureClientPortAddress), secureClientPort);
+            this.secureClientPortAddress = new InetSocketAddress(InetAddress.getByName(secureClientPortAddress), secureClientPort);
             LOG.info("secureClientPortAddress is {}", formatInetAddr(this.secureClientPortAddress));
         } else {
             this.secureClientPortAddress = new InetSocketAddress(secureClientPort);
@@ -412,13 +410,13 @@ public class QuorumPeerConfig {
         maxSessionTimeout = maxSessionTimeout == -1 ? tickTime * 20 : maxSessionTimeout;
 
         if (minSessionTimeout > maxSessionTimeout) {
-            throw new IllegalArgumentException(
-                    "minSessionTimeout must not be larger than maxSessionTimeout");
+            throw new IllegalArgumentException("minSessionTimeout must not be larger than maxSessionTimeout");
         }          
 
         // backward compatibility - dynamic configuration in the same file as
         // static configuration params see writeDynamicConfig()
         if (dynamicConfigFileStr == null) {
+            // ** 设置配置
             setupQuorumPeerConfig(zkProp, true);
             if (isDistributed() && isReconfigEnabled()) {
                 // we don't backup static config for standalone mode.
@@ -493,8 +491,9 @@ public class QuorumPeerConfig {
                 List<String> servers = new ArrayList<String>();
                 for (Entry<Object, Object> entry : cfg.entrySet()) {
                     String key = entry.getKey().toString().trim();
-                    if ( !needKeepVersion && key.startsWith("version"))
+                    if ( !needKeepVersion && key.startsWith("version")) {
                         continue;
+                    }
 
                     String value = entry.getValue().toString().trim();
                     servers.add(key
@@ -587,19 +586,28 @@ public class QuorumPeerConfig {
     
     
     private static QuorumVerifier createQuorumVerifier(Properties dynamicConfigProp, boolean isHierarchical) throws ConfigException{
-       if(isHierarchical){
+       if(isHierarchical) {
             return new QuorumHierarchical(dynamicConfigProp);
-        } else {
+       } else {
            /*
-             * The default QuorumVerifier is QuorumMaj
-             */        
-            //LOG.info("Defaulting to majority quorums");
-            return new QuorumMaj(dynamicConfigProp);            
-        }          
+            * The default QuorumVerifier is QuorumMaj
+            */
+           // LOG.info("Defaulting to majority quorums");
+           // 记录参与投票的服务器数量
+           return new QuorumMaj(dynamicConfigProp);
+       }
     }
 
-    void setupQuorumPeerConfig(Properties prop, boolean configBackwardCompatibilityMode)
-            throws IOException, ConfigException {
+    /**
+     * 设置配置
+     *
+     * @param prop
+     * @param configBackwardCompatibilityMode
+     * @throws IOException
+     * @throws ConfigException
+     */
+    void setupQuorumPeerConfig(Properties prop, boolean configBackwardCompatibilityMode) throws IOException, ConfigException {
+        // 解析动态配置文件并返回 quorumVerifier 以进行新配置
         quorumVerifier = parseDynamicConfig(prop, electionAlg, true, configBackwardCompatibilityMode);
         setupMyId();
         setupClientPort();
@@ -633,8 +641,7 @@ public class QuorumPeerConfig {
         int numObservers = qv.getObservingMembers().size();
         if (numParticipators == 0) {
             if (!standaloneEnabled) {
-                throw new IllegalArgumentException("standaloneEnabled = false then " +
-                        "number of participants should be >0");
+                throw new IllegalArgumentException("standaloneEnabled = false then " + "number of participants should be >0");
             }
             if (numObservers > 0) {
                 throw new IllegalArgumentException("Observers w/o participants is an invalid configuration");
@@ -651,8 +658,7 @@ public class QuorumPeerConfig {
         } else {
             if (warnings) {
                 if (numParticipators <= 2) {
-                    LOG.warn("No server failure will be tolerated. " +
-                        "You need at least 3 servers.");
+                    LOG.warn("No server failure will be tolerated. " + "You need at least 3 servers.");
                 } else if (numParticipators % 2 == 0) {
                     LOG.warn("Non-optimial configuration, consider an odd number of servers.");
                 }
@@ -663,9 +669,9 @@ public class QuorumPeerConfig {
              */            
            if (eAlg != 0) {
                for (QuorumServer s : qv.getVotingMembers().values()) {
-                   if (s.electionAddr == null)
-                       throw new IllegalArgumentException(
-                               "Missing election port for server: " + s.id);
+                   if (s.electionAddr == null) {
+                       throw new IllegalArgumentException("Missing election port for server: " + s.id);
+                   }
                }
            }   
         }

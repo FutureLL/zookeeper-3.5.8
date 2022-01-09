@@ -63,17 +63,28 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
 
     @Override
     protected void setupRequestProcessors() {
+        // 集群中的 Leader 节点第五个处理器是 FinalRequestProcessor【更新内存,返回response】
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+
+        // 集群中的 Leader 节点第四个处理器是 ToBeAppliedRequestProcessor
         RequestProcessor toBeAppliedProcessor = new Leader.ToBeAppliedRequestProcessor(finalProcessor, getLeader());
-        commitProcessor = new CommitProcessor(toBeAppliedProcessor,
-                Long.toString(getServerId()), false,
-                getZooKeeperServerListener());
+
+        // 集群中的 Leader 节点第三个处理器是 CommitProcessor
+        commitProcessor = new CommitProcessor(toBeAppliedProcessor, Long.toString(getServerId()), false, getZooKeeperServerListener());
+        /** @see CommitProcessor#run() */
         commitProcessor.start();
-        ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this,
-                commitProcessor);
+
+        // 集群中的 Leader 节点第二个处理器是 ProposalRequestProcessor
+        ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this, commitProcessor);
+        /** @see SyncRequestProcessor#run()【持久化txn、快照】 */
         proposalProcessor.initialize();
+
+        // 集群中的 Leader 节点第一个处理器是 PrepRequestProcessor【checkAcl、构造txn】
+        // 写请求发送到 Leader
         prepRequestProcessor = new PrepRequestProcessor(this, proposalProcessor);
+        /** @see PrepRequestProcessor#run() */
         prepRequestProcessor.start();
+
         firstProcessor = new LeaderRequestProcessor(this, prepRequestProcessor);
 
         setupContainerManager();
@@ -83,11 +94,12 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
         containerManager = new ContainerManager(getZKDatabase(), prepRequestProcessor,
                 Integer.getInteger("znode.container.checkIntervalMs", (int) TimeUnit.MINUTES.toMillis(1)),
                 Integer.getInteger("znode.container.maxPerMinute", 10000)
-                );
+        );
     }
 
     @Override
     public synchronized void startup() {
+        // 调用父类的 startup()
         super.startup();
         if (containerManager != null) {
             containerManager.start();
@@ -147,6 +159,7 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
          * This is done so that requests from learners won't go through
          * LeaderRequestProcessor which perform local session upgrade.
          */
+        // Leader 的第一个处理器 --- 准备请求处理器
         prepRequestProcessor.processRequest(request);
     }
 

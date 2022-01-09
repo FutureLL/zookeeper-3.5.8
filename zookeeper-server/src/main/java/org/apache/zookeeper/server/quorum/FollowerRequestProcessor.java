@@ -47,10 +47,8 @@ public class FollowerRequestProcessor extends ZooKeeperCriticalThread implements
 
     boolean finished = false;
 
-    public FollowerRequestProcessor(FollowerZooKeeperServer zks,
-            RequestProcessor nextProcessor) {
-        super("FollowerRequestProcessor:" + zks.getServerId(), zks
-                .getZooKeeperServerListener());
+    public FollowerRequestProcessor(FollowerZooKeeperServer zks, RequestProcessor nextProcessor) {
+        super("FollowerRequestProcessor:" + zks.getServerId(), zks.getZooKeeperServerListener());
         this.zks = zks;
         this.nextProcessor = nextProcessor;
     }
@@ -70,6 +68,7 @@ public class FollowerRequestProcessor extends ZooKeeperCriticalThread implements
                 // We want to queue the request to be processed before we submit
                 // the request to the leader so that we are ready to receive
                 // the response
+                // 调用 CommitProcessor 处理器
                 nextProcessor.processRequest(request);
 
                 // We now ship the request to the leader. As with all
@@ -93,6 +92,7 @@ public class FollowerRequestProcessor extends ZooKeeperCriticalThread implements
                 case OpCode.setACL:
                 case OpCode.multi:
                 case OpCode.check:
+                    // 请求转发
                     zks.getFollower().request(request);
                     break;
                 case OpCode.createSession:

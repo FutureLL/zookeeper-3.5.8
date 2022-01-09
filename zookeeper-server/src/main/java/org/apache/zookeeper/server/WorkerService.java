@@ -45,11 +45,10 @@ import org.slf4j.LoggerFactory;
  * useful even with a single thread.
  */
 public class WorkerService {
-    private static final Logger LOG =
-        LoggerFactory.getLogger(WorkerService.class);
 
-    private final ArrayList<ExecutorService> workers =
-        new ArrayList<ExecutorService>();
+    private static final Logger LOG = LoggerFactory.getLogger(WorkerService.class);
+
+    private final ArrayList<ExecutorService> workers = new ArrayList<ExecutorService>();
 
     private final String threadNamePrefix;
     private int numWorkerThreads;
@@ -114,8 +113,7 @@ public class WorkerService {
             return;
         }
 
-        ScheduledWorkRequest scheduledWorkRequest =
-            new ScheduledWorkRequest(workRequest);
+        ScheduledWorkRequest scheduledWorkRequest = new ScheduledWorkRequest(workRequest);
 
         // If we have a worker thread pool, use that; otherwise, do the work
         // directly.
@@ -131,13 +129,18 @@ public class WorkerService {
                 workRequest.cleanup();
             }
         } else {
-            // When there is no worker thread pool, do the work directly
-            // and wait for its completion
+            /**
+             * When there is no worker thread pool, do the work directly
+             * and wait for its completion
+             * 当没有工作线程池时,直接做工作
+             * 并等待其完成
+             */
             scheduledWorkRequest.run();
         }
     }
 
     private class ScheduledWorkRequest implements Runnable {
+
         private final WorkRequest workRequest;
 
         ScheduledWorkRequest(WorkRequest workRequest) {
@@ -152,6 +155,10 @@ public class WorkerService {
                     workRequest.cleanup();
                     return;
                 }
+                /**
+                 * 开始服务端工作
+                 * @see NIOServerCnxnFactory.IOWorkRequest#doWork()
+                 */
                 workRequest.doWork();
             } catch (Exception e) {
                 LOG.warn("Unexpected exception", e);

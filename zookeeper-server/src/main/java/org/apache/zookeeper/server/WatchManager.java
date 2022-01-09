@@ -40,11 +40,9 @@ import org.slf4j.LoggerFactory;
 class WatchManager {
     private static final Logger LOG = LoggerFactory.getLogger(WatchManager.class);
 
-    private final HashMap<String, HashSet<Watcher>> watchTable =
-        new HashMap<String, HashSet<Watcher>>();
+    private final HashMap<String, HashSet<Watcher>> watchTable = new HashMap<String, HashSet<Watcher>>();
 
-    private final HashMap<Watcher, HashSet<String>> watch2Paths =
-        new HashMap<Watcher, HashSet<String>>();
+    private final HashMap<Watcher, HashSet<String>> watch2Paths = new HashMap<Watcher, HashSet<String>>();
 
     synchronized int size(){
         int result = 0;
@@ -95,16 +93,14 @@ class WatchManager {
     }
 
     Set<Watcher> triggerWatch(String path, EventType type, Set<Watcher> supress) {
-        WatchedEvent e = new WatchedEvent(type,
-                KeeperState.SyncConnected, path);
+
+        WatchedEvent e = new WatchedEvent(type, KeeperState.SyncConnected, path);
         HashSet<Watcher> watchers;
         synchronized (this) {
             watchers = watchTable.remove(path);
             if (watchers == null || watchers.isEmpty()) {
                 if (LOG.isTraceEnabled()) {
-                    ZooTrace.logTraceMessage(LOG,
-                            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
-                            "No watchers for " + path);
+                    ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK, "No watchers for " + path);
                 }
                 return null;
             }
@@ -115,10 +111,22 @@ class WatchManager {
                 }
             }
         }
+        // Watcher 默认为: NIOServerCnxn
         for (Watcher w : watchers) {
             if (supress != null && supress.contains(w)) {
                 continue;
             }
+            /**
+             * 客户端服务端都在建立 Watcher,
+             * 客户端建立的是实实在在的 Watcher
+             * 服务端建立的是 NIOServerCnxn
+             *    extends ServerCnxn
+             *    ServerCnxn implements Watcher
+             * *********
+             * ** 处理 **
+             * *********
+             * @see NIOServerCnxn#process(org.apache.zookeeper.WatchedEvent)
+             */
             w.process(e);
         }
         return watchers;
