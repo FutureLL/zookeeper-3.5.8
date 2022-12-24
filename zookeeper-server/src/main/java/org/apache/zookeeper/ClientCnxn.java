@@ -354,10 +354,10 @@ public class ClientCnxn {
      * @throws IOException
      */
     public ClientCnxn(String chrootPath, HostProvider hostProvider, int sessionTimeout, ZooKeeper zooKeeper,
-            ClientWatchManager watcher, ClientCnxnSocket clientCnxnSocket, boolean canBeReadOnly)
-            throws IOException {
-        this(chrootPath, hostProvider, sessionTimeout, zooKeeper, watcher,
-             clientCnxnSocket, 0, new byte[16], canBeReadOnly);
+            ClientWatchManager watcher, ClientCnxnSocket clientCnxnSocket, boolean canBeReadOnly
+    ) throws IOException {
+
+        this(chrootPath, hostProvider, sessionTimeout, zooKeeper, watcher, clientCnxnSocket, 0, new byte[16], canBeReadOnly);
     }
 
     /**
@@ -384,7 +384,8 @@ public class ClientCnxn {
      */
     public ClientCnxn(String chrootPath, HostProvider hostProvider, int sessionTimeout, ZooKeeper zooKeeper,
             ClientWatchManager watcher, ClientCnxnSocket clientCnxnSocket,
-            long sessionId, byte[] sessionPasswd, boolean canBeReadOnly) {
+            long sessionId, byte[] sessionPasswd, boolean canBeReadOnly
+    ) {
         // 初始化一些属性
         this.zooKeeper = zooKeeper;
         this.watcher = watcher;
@@ -404,7 +405,7 @@ public class ClientCnxn {
         // TODO 等会在哪
         sendThread = new SendThread(clientCnxnSocket);
         eventThread = new EventThread();
-        this.clientConfig=zooKeeper.getClientConfig();
+        this.clientConfig = zooKeeper.getClientConfig();
         initRequestTimeout();
     }
 
@@ -1588,8 +1589,8 @@ public class ClientCnxn {
      */
     public ReplyHeader submitRequest(RequestHeader h, Record request,
             Record response, WatchRegistration watchRegistration,
-            WatchDeregistration watchDeregistration)
-            throws InterruptedException {
+            WatchDeregistration watchDeregistration
+    ) throws InterruptedException {
 
         ReplyHeader r = new ReplyHeader();
         // 组装请求包
@@ -1603,6 +1604,7 @@ public class ClientCnxn {
             } else {
                 // Wait for request completion infinitely
                 while (!packet.finished) {
+                    // 无限等待
                     packet.wait();
                 }
             }

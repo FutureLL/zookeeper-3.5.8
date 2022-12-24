@@ -63,8 +63,7 @@ public class GetCommand extends CliCommand {
         if (args.length > 2) {
             // rewrite to option
             cmdArgs[2] = "-w";
-            err.println("'get path [watch]' has been deprecated. "
-                    + "Please use 'get [-s] [-w] path' instead.");
+            err.println("'get path [watch]' has been deprecated. " + "Please use 'get [-s] [-w] path' instead.");
             Parser parser = new PosixParser();
             try {
                 cl = parser.parse(options, cmdArgs);

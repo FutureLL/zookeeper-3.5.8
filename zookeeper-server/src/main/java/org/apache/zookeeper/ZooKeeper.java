@@ -864,9 +864,11 @@ public class ZooKeeper implements AutoCloseable {
      */
     public ZooKeeper(String connectString, int sessionTimeout, Watcher watcher,
             boolean canBeReadOnly, HostProvider aHostProvider,
-            ZKClientConfig clientConfig) throws IOException {
-        LOG.info("Initiating client connection, connectString=" + connectString
-                + " sessionTimeout=" + sessionTimeout + " watcher=" + watcher);
+            ZKClientConfig clientConfig
+    ) throws IOException {
+
+        LOG.info("Initiating client connection, connectString="
+                + connectString + " sessionTimeout=" + sessionTimeout + " watcher=" + watcher);
 
         // 提供默认配置
         if (clientConfig == null) {
@@ -910,9 +912,12 @@ public class ZooKeeper implements AutoCloseable {
     protected ClientCnxn createConnection(String chrootPath,
             HostProvider hostProvider, int sessionTimeout, ZooKeeper zooKeeper,
             ClientWatchManager watcher, ClientCnxnSocket clientCnxnSocket,
-            boolean canBeReadOnly) throws IOException {
-        return new ClientCnxn(chrootPath, hostProvider, sessionTimeout, this,
-                watchManager, clientCnxnSocket, canBeReadOnly);
+            boolean canBeReadOnly
+    ) throws IOException {
+
+        return new ClientCnxn(
+                chrootPath, hostProvider, sessionTimeout, this, watchManager, clientCnxnSocket, canBeReadOnly
+        );
     }
 
     /**
@@ -1648,9 +1653,11 @@ public class ZooKeeper implements AutoCloseable {
      * {@link EphemeralType#maxValue()} for {@link EphemeralType#TTL}.
      */
     public String create(final String path, byte data[], List<ACL> acl,
-            CreateMode createMode, Stat stat, long ttl)
-            throws KeeperException, InterruptedException {
+            CreateMode createMode, Stat stat, long ttl
+    ) throws KeeperException, InterruptedException {
+
         final String clientPath = path;
+        // 对节点路径进行校验
         PathUtils.validatePath(clientPath, createMode.isSequential());
         EphemeralType.validateTTL(createMode, ttl);
 
@@ -1662,11 +1669,12 @@ public class ZooKeeper implements AutoCloseable {
         if (acl != null && acl.size() == 0) {
             throw new KeeperException.InvalidACLException();
         }
+        // 封装请求
         Record record = makeCreateRecord(createMode, serverPath, data, acl, ttl);
+        // 提交请求等待返回
         ReplyHeader r = cnxn.submitRequest(h, record, response, null);
         if (r.getErr() != 0) {
-            throw KeeperException.create(KeeperException.Code.get(r.getErr()),
-                    clientPath);
+            throw KeeperException.create(KeeperException.Code.get(r.getErr()), clientPath);
         }
         if (stat != null) {
             DataTree.copyStat(response.getStat(), stat);
@@ -1698,9 +1706,11 @@ public class ZooKeeper implements AutoCloseable {
             record = request;
         } else {
             CreateRequest request = new CreateRequest();
+            // 请求内容
             request.setData(data);
             request.setFlags(createMode.toFlag());
             request.setPath(serverPath);
+            // 操作权限
             request.setAcl(acl);
             record = request;
         }

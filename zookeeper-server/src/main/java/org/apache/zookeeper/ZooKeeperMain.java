@@ -77,8 +77,7 @@ import org.apache.zookeeper.admin.ZooKeeperAdmin;
 public class ZooKeeperMain {
     private static final Logger LOG = LoggerFactory.getLogger(ZooKeeperMain.class);
     static final Map<String,String> commandMap = new HashMap<String,String>( );
-    static final Map<String,CliCommand> commandMapCli =
-            new HashMap<String,CliCommand>( );
+    static final Map<String,CliCommand> commandMapCli = new HashMap<String,CliCommand>( );
 
     protected MyCommandOptions cl = new MyCommandOptions();
     protected HashMap<Integer,String> history = new HashMap<Integer,String>( );
@@ -344,6 +343,7 @@ public class ZooKeeperMain {
     }
 
     void run() throws IOException, InterruptedException {
+        // 如果在登录的时候,没有写入cmd命令
         if (cl.getCommand() == null) {
             System.out.println("Welcome to ZooKeeper!");
 
@@ -386,17 +386,20 @@ public class ZooKeeperMain {
                 jlinemissing = true;
             }
 
+            // 如果有 jline 就用上面的解析命令行; 如果没有,就用下面的解析命令行
             if (jlinemissing) {
                 System.out.println("JLine support is disabled");
                 BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
 
                 String line;
+                // 循环执行
                 while ((line = br.readLine()) != null) {
                     executeLine(line);
                 }
             }
         } else {
-            // Command line args non-null.  Run what was passed.
+            // Command line args non-null.Run what was passed.
+            // 如果登录的时候用换行作为指令,则将指令传给 processCmd 执行
             processCmd(cl);
         }
         System.exit(exitCode);
@@ -694,7 +697,9 @@ public class ZooKeeperMain {
             processCmd(cl);
         } else if (cmd.equals("history")) {
             for (int i = commandCount - 10; i <= commandCount; ++i) {
-                if (i < 0) continue;
+                if (i < 0) {
+                    continue;
+                }
                 System.out.println(i + " - " + history.get(i));
             }
         } else if (cmd.equals("printwatches")) {
