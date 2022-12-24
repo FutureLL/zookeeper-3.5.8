@@ -195,17 +195,22 @@ public class ZooKeeperMain {
 
             while (it.hasNext()) {
                 String opt = it.next();
+                // 客户端启动命令: ./zkCli.sh -r -timeout 5000 -server 127.0.0.1:2181
                 try {
+                    // -server: 客户端与 ZooKeeper 建立链接
                     if (opt.equals("-server")) {
                         options.put("server", it.next());
-                    } else if (opt.equals("-timeout")) {
+                    }
+                    // -timeout: 超时时间,单位毫秒
+                    else if (opt.equals("-timeout")) {
                         options.put("timeout", it.next());
-                    } else if (opt.equals("-r")) {
+                    }
+                    // 只读模式,当节点坏掉的时候,还可以提供读服务
+                    else if (opt.equals("-r")) {
                         options.put("readonly", "true");
                     }
                 } catch (NoSuchElementException e){
-                    System.err.println("Error: no argument found for option "
-                            + opt);
+                    System.err.println("Error: no argument found for option " + opt);
                     return false;
                 }
 
@@ -327,10 +332,10 @@ public class ZooKeeperMain {
      * @throws InterruptedException
      */
     public ZooKeeperMain(String args[]) throws IOException, InterruptedException {
+        // 解析选项
         cl.parseOptions(args);
         System.out.println("Connecting to " + cl.getOption("server"));
-        // 连接 ZK
-        // 命令行传入的参数 server
+        // 连接 ZK: 命令行传入的参数 server,未传入使用默认值【localhost:2181】
         connectToZK(cl.getOption("server"));
     }
 
