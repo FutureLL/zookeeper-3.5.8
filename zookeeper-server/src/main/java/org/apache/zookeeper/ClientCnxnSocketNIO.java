@@ -414,7 +414,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             // 获取被写的数据,从 outgoingQueue 中获取
             // sendThread.tunnelAuthInProgress(): 判断与客户端与服务端的认证是不是还在进行中
             if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
-                // 注册写事件
+                // 注册写事件 TODO 这里没太看懂
                 enableWrite();
             }
         }
