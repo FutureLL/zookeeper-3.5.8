@@ -28,24 +28,36 @@ import org.slf4j.LoggerFactory;
 public enum CreateMode {
     
     /**
+     * 持久节点: 节点创建后,会一直存在,不会因客户端会话失效而删除
+     *
      * The znode will not be automatically deleted upon client's disconnect.
      */
     PERSISTENT (0, false, false, false, false),
     /**
-    * The znode will not be automatically deleted upon client's disconnect,
-    * and its name will be appended with a monotonically increasing number.
-    */
+     * 持久顺序节点: 基本特性与持久节点一致,创建节点的过程中,Zookeeper 会在其名字后自动追加一个单调增长的数字后缀,作为新的节点名
+     *
+     * The znode will not be automatically deleted upon client's disconnect,
+     * and its name will be appended with a monotonically increasing number.
+     */
     PERSISTENT_SEQUENTIAL (2, false, true, false, false),
     /**
+     * 临时节点: 客户端会话失效或连接关闭后,该节点会被自动删除,且不能再临时节点下面创建子节点,
+     *     否则报如下错【org.apache.zookeeper.KeeperException$NoChildrenForEphemeralsException】
+     *
      * The znode will be deleted upon the client's disconnect.
      */
     EPHEMERAL (1, true, false, false, false),
     /**
+     * 临时顺序节点: 基本特性与临时节点一致,创建节点的过程中,Zookeeper 会在其名字后自动追加一个单调增长的数字后缀,作为新的节点名
+     *
      * The znode will be deleted upon the client's disconnect, and its name
      * will be appended with a monotonically increasing number.
      */
     EPHEMERAL_SEQUENTIAL (3, true, true, false, false),
     /**
+     * Container 节点是一个特殊用途的节点,对于诸如 leader,lock 等非常有用。
+     * 当容器的最后一个子对象被删除时,该容器将成为将来某个时候由服务器删除的候选对象。
+     *
      * The znode will be a container node. Container
      * nodes are special purpose nodes useful for recipes such as leader, lock,
      * etc. When the last child of a container is deleted, the container becomes

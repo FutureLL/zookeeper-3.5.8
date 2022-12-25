@@ -87,6 +87,7 @@ public class CreateCommand extends CliCommand {
         }
 
         CreateMode flags;
+        // 判断节点类型
         if(hasE && hasS) {
             flags = CreateMode.EPHEMERAL_SEQUENTIAL;
         } else if (hasE) {
@@ -116,7 +117,10 @@ public class CreateCommand extends CliCommand {
             acl = AclParser.parse(args[3]);
         }
         try {
-            String newPath = hasT ? zk.create(path, data, acl, flags, new Stat(), ttl) : zk.create(path, data, acl, flags);
+            // zk的 create 操作
+            String newPath = hasT
+                    ? zk.create(path, data, acl, flags, new Stat(), ttl)
+                    : zk.create(path, data, acl, flags);
             err.println("Created " + newPath);
         } catch(IllegalArgumentException ex) {
             throw new MalformedPathException(ex.getMessage());

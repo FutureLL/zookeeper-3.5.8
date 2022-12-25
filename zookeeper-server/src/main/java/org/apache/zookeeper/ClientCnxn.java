@@ -124,19 +124,19 @@ public class ClientCnxn {
         byte data[];
     }
 
-    private final CopyOnWriteArraySet<AuthData> authInfo = new CopyOnWriteArraySet<AuthData>();
+    private final CopyOnWriteArraySet<AuthData> authInfo = new CopyOnWriteArraySet<>();
 
     /**
      * These are the packets that have been sent and are waiting for a response.
      * 存放服务器返回结果的 Package
      */
-    private final LinkedList<Packet> pendingQueue = new LinkedList<Packet>();
+    private final LinkedList<Packet> pendingQueue = new LinkedList<>();
 
     /**
      * These are the packets that need to be sent.
      * 存放需要发送包信息的队列
      */
-    private final LinkedBlockingDeque<Packet> outgoingQueue = new LinkedBlockingDeque<Packet>();
+    private final LinkedBlockingDeque<Packet> outgoingQueue = new LinkedBlockingDeque<>();
 
     private int connectTimeout;
 
@@ -402,8 +402,9 @@ public class ClientCnxn {
         // 是否是只读模式
         readOnly = canBeReadOnly;
 
-        // TODO 等会在哪
+        // SendThread: 负责将 ZooKeeper 的请求信息封装成一个 Packet,发送给 Server,并维持同 Server 的心跳
         sendThread = new SendThread(clientCnxnSocket);
+        // EventThread: 负责解析通过通过 SendThread 得到的 Response,之后发送给 Watcher::processEvent 进行详细的事件处理
         eventThread = new EventThread();
         this.clientConfig = zooKeeper.getClientConfig();
         initRequestTimeout();
@@ -414,10 +415,12 @@ public class ClientCnxn {
      */
     public void start() {
         /**
+         * 发送请求
          * @see org.apache.zookeeper.ClientCnxn.SendThread#run()
          */
         sendThread.start();
         /**
+         * 事件处理
          * @see org.apache.zookeeper.ClientCnxn.EventThread#run()
          */
         eventThread.start();
@@ -894,7 +897,7 @@ public class ClientCnxn {
                 }
 
                 /**
-                 * 将事件天际到队列中
+                 * 将事件添加到事件队列中
                  * @see org.apache.zookeeper.ClientCnxn.EventThread#queueEvent(org.apache.zookeeper.WatchedEvent, java.util.Set<org.apache.zookeeper.Watcher>)
                  */
                 eventThread.queueEvent(we);
@@ -1163,17 +1166,22 @@ public class ClientCnxn {
             // clientCnxnSocket 对象是在初始化连接的时候存放到 SendThread() 中的
             // sendThread = new SendThread(clientCnxnSocket);
             clientCnxnSocket.introduce(this, sessionId, outgoingQueue);
+            // 初始化当前时间 now = Time.currentElapsedTime() = System.nanoTime() / 1000000;
             clientCnxnSocket.updateNow();
+            // 初始化最后发信时间和最后收信时间
             clientCnxnSocket.updateLastSendAndHeard();
+
             int to;
+            // 最后 ping 读写服务器时间
             long lastPingRwServer = Time.currentElapsedTime();
-            final int MAX_SEND_PING_INTERVAL = 10000; //10 seconds
+            // 最大发 ping 信号间隔 - 10seconds
+            final int MAX_SEND_PING_INTERVAL = 10000;
             InetSocketAddress serverAddress = null;
 
-            // this != CLOSED && this != AUTH_FAILED
+            // 如果状态是活的: this != CLOSED && this != AUTH_FAILED
             while (state.isAlive()) {
                 try {
-                    // client 是否连接到 server,如果没有连接,到则连接 server
+                    // client 是否连接到 server,如果没有连接,到则连接 servers
                     if (!clientCnxnSocket.isConnected()) {
                         // don't re-establish connection if we are closing
                         // 正在关闭,不允许重新建立连接
@@ -1280,7 +1288,9 @@ public class ClientCnxn {
                     }
 
                     /**
-                     * 连接成功后,默认执行
+                     * *********************
+                     * ** 连接成功后,默认执行 **
+                     * *********************
                      * @see ClientCnxnSocketNIO#doTransport(int, java.util.List, org.apache.zookeeper.ClientCnxn)
                      */
                     clientCnxnSocket.doTransport(to, pendingQueue, ClientCnxn.this);
@@ -1593,16 +1603,20 @@ public class ClientCnxn {
     ) throws InterruptedException {
 
         ReplyHeader r = new ReplyHeader();
-        // 组装请求包
+        // **************
+        // ** 组装请求包 **
+        // **************
         Packet packet = queuePacket(h, r, request, response, null, null, null, null, watchRegistration, watchDeregistration);
         // 阻塞等待响应
         synchronized (packet) {
             // 未超时
             if (requestTimeout > 0) {
                 // Wait for request completion with timeout
+                // 等待请求超时完成
                 waitForPacketFinish(r, packet);
             } else {
                 // Wait for request completion infinitely
+                // 无限地等待请求完成
                 while (!packet.finished) {
                     // 无限等待
                     packet.wait();
@@ -1664,7 +1678,8 @@ public class ClientCnxn {
     public Packet queuePacket(RequestHeader h, ReplyHeader r, Record request,
             Record response, AsyncCallback cb, String clientPath,
             String serverPath, Object ctx, WatchRegistration watchRegistration,
-            WatchDeregistration watchDeregistration) {
+            WatchDeregistration watchDeregistration
+    ) {
 
         // 组装包信息
         Packet packet = null;
@@ -1694,11 +1709,12 @@ public class ClientCnxn {
                 if (h.getType() == OpCode.closeSession) {
                     closing = true;
                 }
-                // 添加到队列中
+                // 添加到队列 outgoingQueue 中
                 // TODO 什么时候从队列中去取？
                 outgoingQueue.add(packet);
             }
         }
+        // 告诉 ClientCnxn 有消息来了
         sendThread.getClientCnxnSocket().packetAdded();
         return packet;
     }
@@ -1739,16 +1755,18 @@ public class ClientCnxn {
         try {
             requestTimeout = clientConfig.getLong(
                     ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT,
-                    ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT_DEFAULT);
+                    ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT_DEFAULT
+            );
+
             LOG.info("{} value is {}. feature enabled=",
                     ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT,
-                    requestTimeout, requestTimeout > 0);
+                    requestTimeout, requestTimeout > 0
+            );
         } catch (NumberFormatException e) {
-            LOG.error(
-                    "Configured value {} for property {} can not be parsed to long.",
-                    clientConfig.getProperty(
-                            ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT),
-                    ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT);
+            LOG.error( "Configured value {} for property {} can not be parsed to long.",
+                    clientConfig.getProperty(ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT),
+                    ZKClientConfig.ZOOKEEPER_REQUEST_TIMEOUT
+            );
             throw e;
         }
     }

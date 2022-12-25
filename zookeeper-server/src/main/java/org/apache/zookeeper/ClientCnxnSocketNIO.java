@@ -191,7 +191,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             return null;
         }
         // If we've already starting sending the first packet, we better finish
-        // 取出第一个
+        // 拿到队列头的数据包
         if (outgoingQueue.getFirst().bb != null || !tunneledAuthInProgres) {
             return outgoingQueue.getFirst();
         }
@@ -375,6 +375,10 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     @Override
     void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException {
 
+        /**
+         * 该操作会唤醒阻塞在这里的 select 操作
+         * @see ClientCnxnSocketNIO#packetAdded()
+         */
         selector.select(waitTimeOut);
         Set<SelectionKey> selected;
         synchronized (this) {
@@ -404,11 +408,17 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 doIO(pendingQueue, cnxn);
             }
         }
+
+        // 如果已连接
         if (sendThread.getZkState().isConnected()) {
+            // 获取被写的数据,从 outgoingQueue 中获取
+            // sendThread.tunnelAuthInProgress(): 判断与客户端与服务端的认证是不是还在进行中
             if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
+                // 注册写事件
                 enableWrite();
             }
         }
+        // 释放资源
         selected.clear();
     }
 
@@ -431,6 +441,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     synchronized void enableWrite() {
         int i = sockKey.interestOps();
+        // 是否注册过写事件
         if ((i & SelectionKey.OP_WRITE) == 0) {
             sockKey.interestOps(i | SelectionKey.OP_WRITE);
         }

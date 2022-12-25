@@ -32,7 +32,7 @@ public class PathUtils {
 	 */
 	public static void validatePath(String path, boolean isSequential) throws IllegalArgumentException {
 	    // isSequential: 节点是否连续,在创建节点时就已指定
-		validatePath(isSequential? path + "1": path);
+		validatePath(isSequential ? path + "1" : path);
 	}
 	
     /**
