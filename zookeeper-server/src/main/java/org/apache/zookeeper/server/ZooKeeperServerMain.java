@@ -72,7 +72,6 @@ public class ZooKeeperServerMain {
      * 1. 从文件中取数据,加载到内存[快照中的文件数据 DataBase,加载到内存中]
      *
      * Start up the ZooKeeper server.
-     *
      * @param args the configfile or the port datadir [ticktime]
      */
     public static void main(String[] args) {
