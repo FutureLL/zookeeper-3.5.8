@@ -136,11 +136,13 @@ public class QuorumPeerConfig {
        
         try {
             File configFile = (new VerifyingFileFactory.Builder(LOG)
-                .warnForRelativePath()
-                .failForNonExistingPath()
-                .build()).create(path);
+                    .warnForRelativePath()
+                    .failForNonExistingPath()
+                    .build()
+            ).create(path);
                 
             Properties cfg = new Properties();
+            // 将 configFile 文件变为流
             FileInputStream in = new FileInputStream(configFile);
             try {
                 cfg.load(in);
@@ -241,6 +243,7 @@ public class QuorumPeerConfig {
         String clientPortAddress = null;
         String secureClientPortAddress = null;
         VerifyingFileFactory vff = new VerifyingFileFactory.Builder(LOG).warnForRelativePath().build();
+        // 属性赋值
         for (Entry<Object, Object> entry : zkProp.entrySet()) {
             String key = entry.getKey().toString().trim();
             String value = entry.getValue().toString().trim();
@@ -276,13 +279,14 @@ public class QuorumPeerConfig {
                 electionAlg = Integer.parseInt(value);
             } else if (key.equals("quorumListenOnAllIPs")) {
                 quorumListenOnAllIPs = Boolean.parseBoolean(value);
-            } else if (key.equals("peerType")) {
+            }
+            // 设置节点类型
+            else if (key.equals("peerType")) {
                 if (value.toLowerCase().equals("observer")) {
                     peerType = LearnerType.OBSERVER;
                 } else if (value.toLowerCase().equals("participant")) {
                     peerType = LearnerType.PARTICIPANT;
-                } else
-                {
+                } else {
                     throw new ConfigException("Unrecognised peertype: " + value);
                 }
             } else if (key.equals( "syncEnabled" )) {
@@ -340,13 +344,15 @@ public class QuorumPeerConfig {
             throw new IllegalArgumentException(
                     QuorumAuth.QUORUM_SASL_AUTH_ENABLED
                             + " is disabled, so cannot enable "
-                            + QuorumAuth.QUORUM_SERVER_SASL_AUTH_REQUIRED);
+                            + QuorumAuth.QUORUM_SERVER_SASL_AUTH_REQUIRED
+            );
         }
         if (!quorumEnableSasl && quorumLearnerRequireSasl) {
             throw new IllegalArgumentException(
                     QuorumAuth.QUORUM_SASL_AUTH_ENABLED
                             + " is disabled, so cannot enable "
-                            + QuorumAuth.QUORUM_LEARNER_SASL_AUTH_REQUIRED);
+                            + QuorumAuth.QUORUM_LEARNER_SASL_AUTH_REQUIRED
+            );
         }
         // If quorumpeer learner is not auth enabled then self won't be able to
         // join quorum. So this condition is ensuring that the quorumpeer learner
@@ -355,7 +361,8 @@ public class QuorumPeerConfig {
             throw new IllegalArgumentException(
                     QuorumAuth.QUORUM_LEARNER_SASL_AUTH_REQUIRED
                             + " is disabled, so cannot enable "
-                            + QuorumAuth.QUORUM_SERVER_SASL_AUTH_REQUIRED);
+                            + QuorumAuth.QUORUM_SERVER_SASL_AUTH_REQUIRED
+            );
         }
 
         // Reset to MIN_SNAP_RETAIN_COUNT if invalid (less than 3)

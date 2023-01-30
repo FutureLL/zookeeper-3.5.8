@@ -140,6 +140,7 @@ public class ZooKeeperServerMain {
             // create a file logger url from the command line args
             // 工具类: 传入日志目录及数据目录
             txnLog = new FileTxnSnapLog(config.dataLogDir, config.dataDir);
+
             // 启动 ZookeeperServer
             final ZooKeeperServer zkServer = new ZooKeeperServer(txnLog, config.tickTime, config.minSessionTimeout, config.maxSessionTimeout, null);
             txnLog.setServerStats(zkServer.serverStats());
@@ -158,16 +159,19 @@ public class ZooKeeperServerMain {
             if (config.getClientPortAddress() != null) {
                 // 获取建立 Socket 工厂,工厂方法模式
                 cnxnFactory = ServerCnxnFactory.createFactory();
+
                 /**
                  * 建立 Socket 时,默认 NIOServerCnxnFactory (是一个线程)【3.4.12版本 NIOServerCnxnFactory 实现了 Runnable】
                  * 3.5.8版本之后,创建了一个 AcceptThread 线程,在调用下边 startup() 方法时启动 AcceptThread.start() 启动线程
                  * @see NIOServerCnxnFactory#start()
                  */
                 cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), false);
+
                 /**
                  * @see NIOServerCnxnFactory#startup(org.apache.zookeeper.server.ZooKeeperServer, boolean)
                  */
                 cnxnFactory.startup(zkServer);
+
                 // zkServer has been started. So we don't need to start it again in secureCnxnFactory.
                 needStartZKServer = false;
             }

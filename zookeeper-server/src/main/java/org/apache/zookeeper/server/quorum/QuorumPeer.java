@@ -1693,20 +1693,21 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             }
             QuorumVerifier prevQV = quorumVerifier;
             quorumVerifier = qv;
-            if (lastSeenQuorumVerifier == null || (qv.getVersion() > lastSeenQuorumVerifier.getVersion()))
+            if (lastSeenQuorumVerifier == null
+                    || (qv.getVersion() > lastSeenQuorumVerifier.getVersion())) {
                 lastSeenQuorumVerifier = qv;
+            }
 
             if (writeToDisk) {
                 // some tests initialize QuorumPeer without a static config file
                 if (configFilename != null) {
                     try {
-                        String dynamicConfigFilename = makeDynamicConfigFilename(
-                                qv.getVersion());
-                        QuorumPeerConfig.writeDynamicConfig(
-                                dynamicConfigFilename, qv, false);
+                        String dynamicConfigFilename = makeDynamicConfigFilename(qv.getVersion());
+                        QuorumPeerConfig.writeDynamicConfig(dynamicConfigFilename, qv, false);
                         QuorumPeerConfig.editStaticConfig(configFilename,
                                 dynamicConfigFilename,
-                                needEraseClientInfoFromStaticConfig());
+                                needEraseClientInfoFromStaticConfig()
+                        );
                     } catch (IOException e) {
                         LOG.error("Error closing file: ", e.getMessage());
                     }
