@@ -200,8 +200,9 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             // 设置守护线程
             super("NIOServerCxnFactory.AcceptThread:" + addr);
             this.acceptSocket = ss;
+            // 事件注册
             this.acceptKey = acceptSocket.register(selector, SelectionKey.OP_ACCEPT);
-            this.selectorThreads = Collections.unmodifiableList(new ArrayList<SelectorThread>(selectorThreads));
+            this.selectorThreads = Collections.unmodifiableList(new ArrayList<>(selectorThreads));
             // 设置 SelectorThread 线程
             selectorIterator = this.selectorThreads.iterator();
         }
@@ -667,7 +668,12 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         expirerThread = new ConnectionExpirerThread();
 
         int numCores = Runtime.getRuntime().availableProcessors();
-        // 32 cores sweet spot seems to be 4 selector threads
+        /**
+         * 多路复用线程数设置的算法
+         * 如果系统参数设置了 zookeeper.nio.numSelectorThreads 则使用该参数,如果没有设置则使用机器内核数开平方的值除2,最小参数值为1
+         *
+         * 32 cores sweet spot seems to be 4 selector threads
+         */
         numSelectorThreads = Integer.getInteger(ZOOKEEPER_NIO_NUM_SELECTOR_THREADS, Math.max((int) Math.sqrt((float) numCores/2), 1));
         if (numSelectorThreads < 1) {
             throw new IOException("numSelectorThreads must be at least 1");
@@ -681,10 +687,10 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
                  + " timeout, " + numSelectorThreads + " selector thread(s), "
                  + (numWorkerThreads > 0 ? numWorkerThreads : "no")
                  + " worker threads, and "
-                 + (directBufferBytes == 0 ? "gathered writes." :
-                    ("" + (directBufferBytes/1024) + " kB direct buffers.")));
+                 + (directBufferBytes == 0 ? "gathered writes." : ("" + (directBufferBytes/1024) + " kB direct buffers."))
+        );
 
-        for(int i=0; i<numSelectorThreads; ++i) {
+        for (int i = 0; i < numSelectorThreads; ++i) {
             selectorThreads.add(new SelectorThread(i));
         }
 
@@ -695,6 +701,9 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         ss.socket().bind(addr);
         ss.configureBlocking(false);
         /**
+         * AcceptThread 主要的工作是处理连接就绪信息,获取就绪的连接放到就绪队列里,由 SelectorThread 进行注册读事件,
+         * 读取完成之后将请求扔给线程池处理,线程池处理完的响应扔到 updateQueue 中,最后写回.
+         *
          * 把当前类作为一个线程
          * @see AcceptThread#AcceptThread(java.nio.channels.ServerSocketChannel, java.net.InetSocketAddress, java.util.Set)
          */

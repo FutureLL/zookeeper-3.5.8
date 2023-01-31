@@ -973,9 +973,6 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             throw re;
         }
 
-        // if (!getView().containsKey(myid)) {
-        //     throw new RuntimeException("My id " + myid + " not in the peer list");
-        // }
         if (electionType == 0) {
             try {
                 udpSocket = new DatagramSocket(getQuorumAddress().getPort());
@@ -1114,7 +1111,10 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                  * @see QuorumCnxManager.Listener#run()
                  */
                 listener.start();
-                // 默认使用快速 Leader 选举: FastLeaderElection
+                /**
+                 * 默认使用快速 Leader 选举: FastLeaderElection
+                 * @see FastLeaderElection
+                 */
                 FastLeaderElection fle = new FastLeaderElection(this, qcm);
                 /**
                  * 启动两个线程
@@ -1173,7 +1173,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         try {
             jmxQuorumBean = new QuorumBean(this);
             MBeanRegistry.getInstance().register(jmxQuorumBean, null);
-            // 循环所有 servver
+            // 循环所有 server
             for(QuorumServer s: getView().values()){
                 ZKMBeanInfo p;
                 // 如果是自己

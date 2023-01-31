@@ -23,13 +23,10 @@ import javax.management.JMException;
 import javax.security.sasl.SaslException;
 
 import org.apache.yetus.audience.InterfaceAudience;
+import org.apache.zookeeper.server.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.zookeeper.jmx.ManagedUtil;
-import org.apache.zookeeper.server.ServerCnxnFactory;
-import org.apache.zookeeper.server.ZKDatabase;
-import org.apache.zookeeper.server.DatadirCleanupManager;
-import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.admin.AdminServer.AdminServerException;
 import org.apache.zookeeper.server.persistence.FileTxnSnapLog;
 import org.apache.zookeeper.server.persistence.FileTxnSnapLog.DatadirException;
@@ -169,20 +166,25 @@ public class QuorumPeerMain {
           // 客户端的 host 请求,不配置的话可以接受任意发向 2181 的请求
           if (config.getClientPortAddress() != null) {
               cnxnFactory = ServerCnxnFactory.createFactory();
+              /**
+               * 默认调用NIO的configure()方法
+               * @see NIOServerCnxnFactory#configure(java.net.InetSocketAddress, int, boolean)
+               */
               cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), false);
           }
-          // SSL 安全 host
+          // SSL 安全 host 请求,客户端连接
           if (config.getSecureClientPortAddress() != null) {
               secureCnxnFactory = ServerCnxnFactory.createFactory();
               secureCnxnFactory.configure(config.getSecureClientPortAddress(), config.getMaxClientCnxns(), true);
           }
 
+          // 创建实例
           quorumPeer = getQuorumPeer();
           quorumPeer.setTxnFactory(new FileTxnSnapLog(config.getDataLogDir(), config.getDataDir()));
           quorumPeer.enableLocalSessions(config.areLocalSessionsEnabled());
           quorumPeer.enableLocalSessionsUpgrading(config.isLocalSessionsUpgradingEnabled());
           //quorumPeer.setQuorumPeers(config.getAllMembers());
-          // 设置选举算法
+          // 设置选举算法,用于确定选举算法
           quorumPeer.setElectionType(config.getElectionAlg());
           quorumPeer.setMyid(config.getServerId());
           quorumPeer.setTickTime(config.getTickTime());
@@ -197,6 +199,7 @@ public class QuorumPeerMain {
               quorumPeer.setLastSeenQuorumVerifier(config.getLastSeenQuorumVerifier(), false);
           }
           quorumPeer.initConfigInZKDatabase();
+          // ServerCnxnFactory 客户端请求管理工厂类
           quorumPeer.setCnxnFactory(cnxnFactory);
           quorumPeer.setSecureCnxnFactory(secureCnxnFactory);
           quorumPeer.setSslQuorum(config.isSslQuorum());
