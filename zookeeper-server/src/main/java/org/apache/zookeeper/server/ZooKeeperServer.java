@@ -289,10 +289,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
          *  
          * See ZOOKEEPER-1642 for more detail.
          */
+        // 是否已初始化
         if(zkDb.isInitialized()){
             setZxid(zkDb.getDataTreeLastProcessedZxid());
         }
         else {
+            // 未初始化,加载数据,设置Zxid
             setZxid(zkDb.loadDataBase());
         }
         
@@ -455,6 +457,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
         // 没有初始化,则加载数据,从快照中导入数据到内存
         if (!zkDb.isInitialized()) {
+            // 加载数据
             loadData();
         }
     }

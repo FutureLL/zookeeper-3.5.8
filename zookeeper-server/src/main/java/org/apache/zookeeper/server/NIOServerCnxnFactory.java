@@ -761,6 +761,13 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         if (workerPool == null) {
             workerPool = new WorkerService("NIOWorker", numWorkerThreads, false);
         }
+        /**
+         * AcceptThread 主要的工作是处理连接就绪信息,获取就绪的连接放到就绪队列里,
+         * 由 SelectorThread 进行注册读事件,读取完成之后将请求扔给线程池处理,线程池处理完的响应扔到 updateQueue 中,最后写回
+         *
+         * NIOServerCnxnFactory 将接收网络连接与处理IO的操作分开了,
+         * 也即是 AcceptThread 用来接收连接,SelectorThread 用来处理IO请求.
+         */
         // 循环执行 SelectorThread
         for(SelectorThread thread : selectorThreads) {
             if (thread.getState() == Thread.State.NEW) {
