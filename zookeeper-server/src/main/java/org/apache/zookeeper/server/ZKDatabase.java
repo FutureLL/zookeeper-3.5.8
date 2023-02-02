@@ -238,7 +238,11 @@ public class ZKDatabase {
      * @throws IOException
      */
     public long loadDataBase() throws IOException {
-        // 恢复快照数据
+        /**
+         * 恢复快照数据
+         * 日志快照工具类: FileTxnSnapLog
+         * restore(): 恢复日志
+         */
         long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener);
         initialized = true;
         return zxid;

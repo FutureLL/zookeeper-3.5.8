@@ -228,7 +228,7 @@ public class FileTxnSnapLog {
      */
     public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
 
-        // 从快照中反序列化数据
+        // 从快照中反序列化日志数据,到 DataTree 上
         long deserializeResult = snapLog.deserialize(dt, sessions);
         FileTxnLog txnLog = new FileTxnLog(dataDir);
 

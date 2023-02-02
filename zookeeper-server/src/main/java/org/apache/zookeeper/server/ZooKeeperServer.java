@@ -470,7 +470,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         // 启动 session 跟踪器
         startSessionTracker();
         /**
-         * 初始化调用链
+         * 请求处理器,初始化调用链
          * @see LeaderZooKeeperServer#setupRequestProcessors()      Leader
          * @see FollowerZooKeeperServer#setupRequestProcessors()    Follower
          * @see ObserverZooKeeperServer#setupRequestProcessors()    Observer
@@ -484,11 +484,21 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     protected void setupRequestProcessors() {
+        /**
+         * 链式处理:
+         * PrepRequestProcessor.next -> SyncRequestProcessor.next -> FinalRequestProcessor
+         */
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor syncProcessor = new SyncRequestProcessor(this, finalProcessor);
+        /**
+         * @see SyncRequestProcessor#run()
+         */
         ((SyncRequestProcessor)syncProcessor).start();
         firstProcessor = new PrepRequestProcessor(this, syncProcessor);
-        // 执行线程
+        /**
+         * 执行线程
+         * @see PrepRequestProcessor#run()
+         */
         ((PrepRequestProcessor)firstProcessor).start();
     }
 

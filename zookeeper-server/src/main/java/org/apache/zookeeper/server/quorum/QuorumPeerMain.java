@@ -224,7 +224,10 @@ public class QuorumPeerMain {
           // quorumPeer 初始化
           quorumPeer.initialize();
 
-          // 启动
+          /**
+           * 启动
+           * @see QuorumPeer#start()
+           */
           quorumPeer.start();
           quorumPeer.join();
       } catch (InterruptedException e) {
