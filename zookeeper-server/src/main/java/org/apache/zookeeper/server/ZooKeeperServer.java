@@ -497,6 +497,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         firstProcessor = new PrepRequestProcessor(this, syncProcessor);
         /**
          * 执行线程
+         * 从队列中取出请求 request,然后根据请求处理链处理请求 request
          * @see PrepRequestProcessor#run()
          */
         ((PrepRequestProcessor)firstProcessor).start();
