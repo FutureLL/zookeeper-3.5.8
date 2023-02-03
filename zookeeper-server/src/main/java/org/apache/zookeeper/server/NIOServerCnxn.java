@@ -169,6 +169,7 @@ public class NIOServerCnxn extends ServerCnxn {
         // have we read length bytes?
         if (incomingBuffer.remaining() != 0) {
             // sock is non-blocking, so ok
+            // 继续读取数据
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
                 throw new EndOfStreamException("Unable to read additional data from client sessionid 0x" + Long.toHexString(sessionId) + ", likely client has closed socket");
@@ -177,16 +178,16 @@ public class NIOServerCnxn extends ServerCnxn {
 
         // have we read length bytes?
         if (incomingBuffer.remaining() == 0) {
-            // 计数
+            // 计数: 标记当前接收到了数据次数,以及记录当前接收到了多少字节
             packetReceived();
             incomingBuffer.flip();
-            // 初始化
+            // 初始化: 默认是false,执行完 readConnectRequest() 后 initialized 变为 true
             if (!initialized) {
-                // 连接读取请求
+                // 连接读取请求,也就是当前session对话第一次连接的时候会走这里,会处理sessionId
                 readConnectRequest();
             } else {
                 /**
-                 * 读取请求
+                 * ** 读取请求,这里才是接收命令的地方 **
                  * @see ZooKeeperServer#processPacket(org.apache.zookeeper.server.ServerCnxn, java.nio.ByteBuffer)
                  */
                 readRequest();
@@ -327,25 +328,32 @@ public class NIOServerCnxn extends ServerCnxn {
 
                 return;
             }
+            // 如果当前是读请求
             if (k.isReadable()) {
+                // 读取数据到buffer对象中,incomingBuffer 默认大小是4
                 int rc = sock.read(incomingBuffer);
                 if (rc < 0) {
                     throw new EndOfStreamException("Unable to read additional data from client sessionid 0x" + Long.toHexString(sessionId) + ", likely client has closed socket");
                 }
+                // 缓冲区是否读取完整
                 if (incomingBuffer.remaining() == 0) {
                     boolean isPayload;
                     // start of next request
+                    // 默认走这里
                     if (incomingBuffer == lenBuffer) {
                         incomingBuffer.flip();
+                        // 读取当前请求的长度,并重新实例化 incomingBuffer
                         isPayload = readLength(k);
+                        // 清空缓冲区
                         incomingBuffer.clear();
                     } else {
                         // continuation
                         isPayload = true;
                     }
                     // not the case for 4letterword
+                    // 读取具体指令数据
                     if (isPayload) {
-                        // 读取请求
+                        // ** 读取请求 **
                         readPayload();
                     }
                     else {

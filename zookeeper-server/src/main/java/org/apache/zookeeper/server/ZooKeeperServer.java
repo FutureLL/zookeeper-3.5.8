@@ -1128,20 +1128,24 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
     public void processPacket(ServerCnxn cnxn, ByteBuffer incomingBuffer) throws IOException {
         // We have the request, now process and setup for next
+        // 封装成二进制流
         InputStream bais = new ByteBufferInputStream(incomingBuffer);
         BinaryInputArchive bia = BinaryInputArchive.getArchive(bais);
+        // 请求头对象
         RequestHeader h = new RequestHeader();
+        // 反序列化请求头,此时会读取到xid和type两个值
         h.deserialize(bia, "header");
         // Through the magic of byte buffers, txn will not be
         // pointing
         // to the start of the txn
         incomingBuffer = incomingBuffer.slice();
 
-        // 根据 RequestHeader 的不同类型进行处理
+        // 判断当前是否为授权操作: 根据 RequestHeader 的不同类型进行处理
         if (h.getType() == OpCode.auth) {
             LOG.info("got auth packet " + cnxn.getRemoteSocketAddress());
+            // 执行授权操作
             AuthPacket authPacket = new AuthPacket();
-            // 反序列化,给 authPacket 对象填充值
+            // 反序列化,给 authPacket 对象填充值: 会读取到客服端传过来的type、scheme、auth等信息
             ByteBufferInputStream.byteBuffer2Record(incomingBuffer, authPacket);
             // 如果命令为: addauth digest zhangsan:123456, 那么 scheme 为 digest
             String scheme = authPacket.getScheme();
@@ -1152,12 +1156,15 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 try {
                     // 调用 DigestAuthenticationProvider 类的 handleAuthentication() 方法
                     // 如果命令为: addauth digest zhangsan:123456, 那么 authPacket.getAuth() 为: zhangsan:123456
+                    // 此时会向 ServerCnxn 对象中的 authInfo 集合添加当前的授权
                     authReturn = ap.handleAuthentication(cnxn, authPacket.getAuth());
                 } catch(RuntimeException e) {
                     LOG.warn("Caught runtime exception from AuthenticationProvider: " + scheme + " due to " + e);
                     authReturn = KeeperException.Code.AUTHFAILED;
                 }
             }
+
+            // 权限添加成功返回
             if (authReturn == KeeperException.Code.OK) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Authentication succeeded for scheme: " + scheme);
@@ -1165,7 +1172,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 LOG.info("auth success " + cnxn.getRemoteSocketAddress());
                 ReplyHeader rh = new ReplyHeader(h.getXid(), 0, KeeperException.Code.OK.intValue());
                 cnxn.sendResponse(rh, null, null);
-            } else {
+            }
+            // 失败返回
+            else {
                 if (ap == null) {
                     LOG.warn("No authentication provider for scheme: "
                             + scheme + " has "
@@ -1190,13 +1199,15 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 cnxn.sendResponse(rh,rsp, "response"); // not sure about 3rd arg..what is it?
                 return;
             }
+            // 以下才是处理日常命令的地方
             else {
+                // 封装具体请求
                 Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(), h.getType(), incomingBuffer, cnxn.getAuthInfo());
                 si.setOwner(ServerCnxn.me);
                 // Always treat packet from the client as a possible
                 // local request.
                 setLocalSessionFlag(si);
-                // 提交请求
+                // ** 提交请求 **
                 submitRequest(si);
             }
         }

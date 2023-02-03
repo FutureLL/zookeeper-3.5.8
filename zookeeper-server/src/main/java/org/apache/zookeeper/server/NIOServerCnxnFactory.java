@@ -396,7 +396,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             try {
                 while (!stopped) {
                     try {
-                        // 进行一些校验&处理ID
+                        // 进行一些校验&处理IO
                         select();
                         processAcceptedConnections();
                         processInterestOpsUpdateRequests();
@@ -447,7 +447,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
                         continue;
                     }
                     if (key.isReadable() || key.isWritable()) {
-                        // 处理ID
+                        // 处理IO
                         handleIO(key);
                     } else {
                         LOG.warn("Unexpected ops in select " + key.readyOps());
@@ -534,16 +534,19 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         }
 
         public void doWork() throws InterruptedException {
+            // 当前key是否已失效
             if (!key.isValid()) {
                 selectorThread.cleanupSelectionKey(key);
                 return;
             }
 
+            // 当前是读写请求
             if (key.isReadable() || key.isWritable()) {
                 // 接收数据,这里会间接性的接收到客户端 ping
                 cnxn.doIO(key);
 
                 // Check if we shutdown or doIO() closed this connection
+                // 检查服务是否挂掉
                 if (stopped) {
                     cnxn.close();
                     return;
@@ -556,6 +559,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             }
 
             // Mark this connection as once again ready for selection
+            // 标记当前key可以重新轮询
             cnxn.enableSelectable();
             // Push an update request on the queue to resume selecting
             // on the current set of interest ops, which may have changed

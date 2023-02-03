@@ -108,21 +108,26 @@ public class WorkerService {
      * this thread.
      */
     public void schedule(WorkRequest workRequest, long id) {
+        // 如果已经服务暂停,清理工作
         if (stopped) {
             workRequest.cleanup();
             return;
         }
 
+        // ScheduledWorkRequest 实现了 Runnable 接口,其 run() 方法就是调用 workRequest.doWork() 方法
         ScheduledWorkRequest scheduledWorkRequest = new ScheduledWorkRequest(workRequest);
 
         // If we have a worker thread pool, use that; otherwise, do the work
         // directly.
+        // 如果当前存在线程池,通过线程池调用,否则直接调用 run() 方法
         int size = workers.size();
         if (size > 0) {
             try {
                 // make sure to map negative ids as well to [0, size-1]
                 int workerNum = ((int) (id % size) + size) % size;
+                // 取出线程池
                 ExecutorService worker = workers.get(workerNum);
+                // 开始执行任务
                 worker.execute(scheduledWorkRequest);
             } catch (RejectedExecutionException e) {
                 LOG.warn("ExecutorService rejected execution", e);
@@ -130,10 +135,9 @@ public class WorkerService {
             }
         } else {
             /**
-             * When there is no worker thread pool, do the work directly
-             * and wait for its completion
-             * 当没有工作线程池时,直接做工作
-             * 并等待其完成
+             * When there is no worker thread pool, do the work directly and wait for its completion
+             * 当没有工作线程池时,直接做工作,并等待其完成
+             * @see ScheduledWorkRequest#run()
              */
             scheduledWorkRequest.run();
         }
