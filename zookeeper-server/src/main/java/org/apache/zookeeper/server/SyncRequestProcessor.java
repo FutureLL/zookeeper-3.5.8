@@ -153,7 +153,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                             logCount = 0;
                         }
                     }
-                    //
+                    // 快照处理完成
                     else if (toFlush.isEmpty()) {
                         // optimization for read heavy workloads
                         // iff this is a read, and there are no pending

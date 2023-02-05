@@ -478,7 +478,7 @@ public class FinalRequestProcessor implements RequestProcessor {
 
         try {
             /**
-             * 发送 Response 到 Socket,这事客户端就能接收到数据
+             * 发送 Response 到 Socket,这是客户端就能接收到数据
              * @see NIOServerCnxn#sendResponse(org.apache.zookeeper.proto.ReplyHeader, org.apache.jute.Record, java.lang.String)
              *
              * rsp: CreateResponse

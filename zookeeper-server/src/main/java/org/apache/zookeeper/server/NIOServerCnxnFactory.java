@@ -542,7 +542,12 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
 
             // 当前是读写请求
             if (key.isReadable() || key.isWritable()) {
-                // 接收数据,这里会间接性的接收到客户端 ping
+
+                /**
+                 * ***************************************
+                 * ** 接收数据,这里会间接性的接收到客户端 ping **
+                 * ***************************************
+                 */
                 cnxn.doIO(key);
 
                 // Check if we shutdown or doIO() closed this connection
@@ -804,6 +809,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         if (startServer) {
             // Database 创建 且 初始化
             zks.startdata();
+            // 初始化请求处理器【链式结构】
             zks.startup();
         }
     }

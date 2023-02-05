@@ -72,8 +72,7 @@ public class NIOServerCnxn extends ServerCnxn {
 
     private ByteBuffer incomingBuffer = lenBuffer;
 
-    private final Queue<ByteBuffer> outgoingBuffers =
-        new LinkedBlockingQueue<ByteBuffer>();
+    private final Queue<ByteBuffer> outgoingBuffers = new LinkedBlockingQueue<ByteBuffer>();
 
     private int sessionTimeout;
 
@@ -353,7 +352,11 @@ public class NIOServerCnxn extends ServerCnxn {
                     // not the case for 4letterword
                     // 读取具体指令数据
                     if (isPayload) {
-                        // ** 读取请求 **
+                        /**
+                         * ************
+                         * ** 读取请求 **
+                         * ************
+                         */
                         readPayload();
                     }
                     else {

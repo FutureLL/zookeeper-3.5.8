@@ -143,9 +143,9 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
                     break;
                 }
                 /**
-                 * ***********
-                 * *** 重要 ***
-                 * ***********
+                 * ************
+                 * ** 处理请求 **
+                 * ************
                  */
                 pRequest(request);
             }
@@ -345,8 +345,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
      * Throws if the path is not valid and returns the parent path.
      * @throws BadArgumentsException
      */
-    private String validatePathForCreate(String path, long sessionId)
-            throws BadArgumentsException {
+    private String validatePathForCreate(String path, long sessionId) throws BadArgumentsException {
         int lastSlash = path.lastIndexOf('/');
         if (lastSlash == -1 || path.indexOf('\0') != -1 || failCreate) {
             LOG.info("Invalid path %s with session 0x%s", path, Long.toHexString(sessionId));
@@ -672,6 +671,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
             data = createTtlRequest.getData();
             ttl = createTtlRequest.getTtl();
         } else {
+            // 强制转换成 CreateRequest 空对象
             CreateRequest createRequest = (CreateRequest)record;
             flags = createRequest.getFlags();
             path = createRequest.getPath();
@@ -686,17 +686,21 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
 
         // 获取父路径,例: create /parent/firstNode, 其中 parent 为父节点
         String parentPath = validatePathForCreate(path, request.sessionId);
-        // 获取路径记录(最近的一次修改)【一个节点的值与最近一次修改有关系】,我取到最近一次的修改就是该节点最新的值
+        // 获取父节点路径记录(最近的一次修改)【一个节点的值与最近一次修改有关系】,我取到最近一次的修改就是该节点最新的值
         ChangeRecord parentRecord = getRecordForPath(parentPath);
 
+        // 校验ACL
         checkACL(zks, parentRecord.acl, ZooDefs.Perms.CREATE, request.authInfo);
+
         // 获取子节点的版本
         int parentCVersion = parentRecord.stat.getCversion();
         // 创建如果为顺序节点
         if (createMode.isSequential()) {
             path = path + String.format(Locale.ENGLISH, "%010d", parentCVersion);
         }
+        // 验证路径
         validatePath(path, request.sessionId);
+
         try {
             if (getRecordForPath(path) != null) {
                 throw new KeeperException.NodeExistsException(path);
@@ -704,14 +708,18 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
         } catch (KeeperException.NoNodeException e) {
             // ignore this one
         }
+
         // 判断父节点如果是临时节点
         boolean ephemeralParent = EphemeralType.get(parentRecord.stat.getEphemeralOwner()) == EphemeralType.NORMAL;
         // 父节点为临时节点不能创建子节点 --- 抛异常
         if (ephemeralParent) {
             throw new KeeperException.NoChildrenForEphemeralsException(path);
         }
+
         // 真正要创建的节点版本号 - 生成新的版本号
         int newCversion = parentRecord.stat.getCversion() + 1;
+
+        // 根据不同类型生成事务
         if (type == OpCode.createContainer) {
             request.setTxn(new CreateContainerTxn(path, data, listACL, newCversion));
         } else if (type == OpCode.createTTL) {
@@ -719,10 +727,13 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
         } else {
             request.setTxn(new CreateTxn(path, data, listACL, createMode.isEphemeral(), newCversion));
         }
+
         StatPersisted s = new StatPersisted();
         if (createMode.isEphemeral()) {
             s.setEphemeralOwner(request.sessionId);
         }
+
+        // 设置父节点的属性值
         parentRecord = parentRecord.duplicate(request.getHdr().getZxid());
         parentRecord.childCount++;
         parentRecord.stat.setCversion(newCversion);
@@ -731,6 +742,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
          * @see PrepRequestProcessor#addChangeRecord(org.apache.zookeeper.server.ZooKeeperServer.ChangeRecord)
          */
         addChangeRecord(parentRecord);
+
         // 当前创建子节点的修改记录
         addChangeRecord(new ChangeRecord(request.getHdr().getZxid(), path, s, 0, listACL));
     }
@@ -739,8 +751,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
         try {
             PathUtils.validatePath(path);
         } catch(IllegalArgumentException ie) {
-            LOG.info("Invalid path {} with session 0x{}, reason: {}",
-                    path, Long.toHexString(sessionId), ie.getMessage());
+            LOG.info("Invalid path {} with session 0x{}, reason: {}", path, Long.toHexString(sessionId), ie.getMessage());
             throw new BadArgumentsException(path);
         }
     }
@@ -942,11 +953,13 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
                 request.setTxn(new ErrorTxn(Code.MARSHALLINGERROR.intValue()));
             }
         }
+
         request.zxid = zks.getZxid();
         /**
          * 调用下一个处理器 --- 该处理器为持久化的处理器
          * 作用: 存储事务,持久化事务以及打快照
          * @see SyncRequestProcessor#processRequest(org.apache.zookeeper.server.Request)
+         *
          * 何时处理: SyncRequestProcessor 类是一个线程
          * @see SyncRequestProcessor#run()
          */

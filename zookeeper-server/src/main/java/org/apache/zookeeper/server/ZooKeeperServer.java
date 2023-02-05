@@ -123,8 +123,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     private final AtomicInteger requestsInProcess = new AtomicInteger(0);
     final Deque<ChangeRecord> outstandingChanges = new ArrayDeque<>();
     // this data structure must be accessed under the outstandingChanges lock
-    final HashMap<String, ChangeRecord> outstandingChangesForPath =
-        new HashMap<String, ChangeRecord>();
+    final HashMap<String, ChangeRecord> outstandingChangesForPath = new HashMap<String, ChangeRecord>();
 
     protected ServerCnxnFactory serverCnxnFactory;
     protected ServerCnxnFactory secureServerCnxnFactory;
@@ -830,6 +829,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
      * @param si
      */
     public void submitRequest(Request si) {
+        /**
+         * PrepRequestProcessor firstProcessor 在这里初始化的
+         * @see org.apache.zookeeper.server.ZooKeeperServer#startup
+         *
+         * 此时如果 firstProcessor 为 null
+         */
         if (firstProcessor == null) {
             synchronized (this) {
                 try {
@@ -848,14 +853,17 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 }
             }
         }
+
+        // firstProcessor 不为 null
         try {
             touch(si.cnxn);
             // 除了 notification 为 false,其余全为 true
-            boolean validpacket = Request.isValid(si.type);
-            if (validpacket) {
+            boolean validPacket = Request.isValid(si.type);
+            if (validPacket) {
                 /**
                  * 处理请求: 将请求添加到 submittedRequests 队列中
                  * @see PrepRequestProcessor#processRequest(org.apache.zookeeper.server.Request)
+                 *
                  * 何时处理: PrepRequestProcessor 类是一个线程
                  * @see org.apache.zookeeper.server.PrepRequestProcessor#run()
                  */
@@ -1141,6 +1149,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         incomingBuffer = incomingBuffer.slice();
 
         // 判断当前是否为授权操作: 根据 RequestHeader 的不同类型进行处理
+        // addauth 命令
         if (h.getType() == OpCode.auth) {
             LOG.info("got auth packet " + cnxn.getRemoteSocketAddress());
             // 执行授权操作
@@ -1207,7 +1216,11 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 // Always treat packet from the client as a possible
                 // local request.
                 setLocalSessionFlag(si);
-                // ** 提交请求 **
+                /**
+                 * ************
+                 * ** 提交请求 **
+                 * ************
+                 */
                 submitRequest(si);
             }
         }
