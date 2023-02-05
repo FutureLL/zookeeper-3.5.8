@@ -212,6 +212,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
                 // 如果 Socket 没有关闭掉
                 while (!stopped && !acceptSocket.socket().isClosed()) {
                     try {
+                        // 处理客户端的连接请求
                         select();
                     } catch (RuntimeException e) {
                         LOG.warn("Ignoring unexpected runtime exception", e);
@@ -248,6 +249,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
                         continue;
                     }
                     if (key.isAcceptable()) {
+                        // 处理具体的请求
                         if (!doAccept()) {
                             // If unable to pull a new connection off the accept
                             // queue, pause accepting to give us time to free
@@ -710,8 +712,8 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         ss.socket().bind(addr);
         ss.configureBlocking(false);
         /**
-         * AcceptThread 主要的工作是处理连接就绪信息,获取就绪的连接放到就绪队列里,由 SelectorThread 进行注册读事件,
-         * 读取完成之后将请求扔给线程池处理,线程池处理完的响应扔到 updateQueue 中,最后写回.
+         * AcceptThread 主要的工作是处理连接就绪信息,获取就绪的连接放到就绪队列里.
+         * SelectorThread 进行注册读事件【从上述的队列中】,读取完成之后将请求扔给线程池处理,最后写回.
          *
          * 把当前类作为一个线程
          * @see AcceptThread#AcceptThread(java.nio.channels.ServerSocketChannel, java.net.InetSocketAddress, java.util.Set)
@@ -771,8 +773,8 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             workerPool = new WorkerService("NIOWorker", numWorkerThreads, false);
         }
         /**
-         * AcceptThread 主要的工作是处理连接就绪信息,获取就绪的连接放到就绪队列里,
-         * 由 SelectorThread 进行注册读事件,读取完成之后将请求扔给线程池处理,线程池处理完的响应扔到 updateQueue 中,最后写回
+         * AcceptThread 主要的工作是处理连接就绪信息,获取就绪的连接放到就绪队列里.
+         * SelectorThread 进行注册读事件【从上述的队列中】,读取完成之后将请求扔给线程池处理,最后写回.
          *
          * NIOServerCnxnFactory 将接收网络连接与处理IO的操作分开了,
          * 也即是 AcceptThread 用来接收连接,SelectorThread 用来处理IO请求.

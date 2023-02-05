@@ -159,10 +159,11 @@ public class ZooKeeperServerMain {
             if (config.getClientPortAddress() != null) {
                 // 获取建立 Socket 工厂,工厂方法模式
                 // 创建访问协议,默认 NIO
-              cnxnFactory = ServerCnxnFactory.createFactory();
+                cnxnFactory = ServerCnxnFactory.createFactory();
 
                 /**
                  * 创建 ZookeeperThread,并启动一个 Socket 等待客户端的连接
+                 * @see NIOServerCnxnFactory#configure(java.net.InetSocketAddress, int, boolean)
                  *
                  * 建立 Socket 时,默认 NIOServerCnxnFactory (是一个线程)【3.4.12版本 NIOServerCnxnFactory 实现了 Runnable】
                  * 3.5.8版本之后,创建了一个 AcceptThread 线程,在调用下边 startup() 方法时启动 AcceptThread.start() 启动线程

@@ -468,6 +468,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
         // 启动 session 跟踪器
         startSessionTracker();
+
         /**
          * 请求处理器,初始化调用链
          * @see LeaderZooKeeperServer#setupRequestProcessors()      Leader
@@ -1220,6 +1221,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                  * ************
                  * ** 提交请求 **
                  * ************
+                 * @see org.apache.zookeeper.server.ZooKeeperServer#submitRequest
                  */
                 submitRequest(si);
             }
