@@ -846,11 +846,8 @@ public class ClientCnxn {
             if (replyHdr.getXid() == -2) {
                 // -2 is the xid for pings
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Got ping response for sessionid: 0x"
-                            + Long.toHexString(sessionId)
-                            + " after "
-                            + ((System.nanoTime() - lastPingSentNs) / 1000000)
-                            + "ms");
+                    LOG.debug("Got ping response for sessionid: 0x" + Long.toHexString(sessionId)
+                            + " after " + ((System.nanoTime() - lastPingSentNs) / 1000000) + "ms");
                 }
                 return;
             }
@@ -875,6 +872,8 @@ public class ClientCnxn {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Got notification sessionid:0x" + Long.toHexString(sessionId));
                 }
+
+                // 从数据流中解析事件
                 WatcherEvent event = new WatcherEvent();
                 event.deserialize(bbia, "response");
 
@@ -897,7 +896,7 @@ public class ClientCnxn {
                 }
 
                 /**
-                 * 将事件添加到事件队列中
+                 * 将事件添加到事件队列中【EventThread.waitingEvents】
                  * @see org.apache.zookeeper.ClientCnxn.EventThread#queueEvent(org.apache.zookeeper.WatchedEvent, java.util.Set<org.apache.zookeeper.Watcher>)
                  */
                 eventThread.queueEvent(we);
