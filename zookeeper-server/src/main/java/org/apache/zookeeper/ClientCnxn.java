@@ -475,6 +475,8 @@ public class ClientCnxn {
                 return;
             }
             sessionState = event.getState();
+
+            // 获取注册过的 Watcher 事件
             final Set<Watcher> watchers;
             if (materializedWatchers == null) {
                 // materialize the watchers based on the event
@@ -688,6 +690,12 @@ public class ClientCnxn {
        }
     }
 
+    /**
+     * 最后,ZooKeeper 客户端就会向服务器端发送这个请求,完成请求发送后.
+     * 调用负责处理服务器响应的 SendThread 线程类中的 readResponse 方法接收服务端的回调,并在最后执行 finishPacket() 方法将 Watch 注册到 ZKWatchManager 中
+     *
+     * @param p
+     */
     // @VisibleForTesting
     protected void finishPacket(Packet p) {
 
