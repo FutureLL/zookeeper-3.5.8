@@ -479,8 +479,11 @@ public class ClientCnxn {
             // 获取注册过的 Watcher 事件
             final Set<Watcher> watchers;
             if (materializedWatchers == null) {
-                // materialize the watchers based on the event
-                // 根据事件具体化观察者
+                /**
+                 * materialize the watchers based on the event
+                 * 根据事件具体化观察者
+                 * @see ZooKeeper.ZKWatchManager#materialize(org.apache.zookeeper.Watcher.Event.KeeperState, org.apache.zookeeper.Watcher.Event.EventType, java.lang.String)
+                 */
                 watchers = watcher.materialize(event.getState(), event.getType(), event.getPath());
             } else {
                 watchers = new HashSet<Watcher>();
