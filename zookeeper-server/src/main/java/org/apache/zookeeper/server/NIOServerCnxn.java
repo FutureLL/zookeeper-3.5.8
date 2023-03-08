@@ -706,13 +706,12 @@ public class NIOServerCnxn extends ServerCnxn {
     /*
      * (non-Javadoc)
      *
-     * @see org.apache.zookeeper.server.ServerCnxnIface#sendResponse(org.apache.zookeeper.proto.ReplyHeader,
-     *      org.apache.jute.Record, java.lang.String)
+     * @see org.apache.zookeeper.server.ServerCnxnIface#sendResponse(org.apache.zookeeper.proto.ReplyHeader, org.apache.jute.Record, java.lang.String)
      */
     @Override
     public void sendResponse(ReplyHeader h, Record r, String tag) {
         try {
-            // 发送响应
+            // 发送响应,写入道Socket中
             super.sendResponse(h, r, tag);
             if (h.getXid() > 0) {
                 // check throttling

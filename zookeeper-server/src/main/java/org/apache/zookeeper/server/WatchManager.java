@@ -120,8 +120,9 @@ class WatchManager {
              * 客户端服务端都在建立 Watcher,
              * 客户端建立的是实实在在的 Watcher
              * 服务端建立的是 NIOServerCnxn
-             *    extends ServerCnxn
-             *    ServerCnxn implements Watcher
+             *      extends ServerCnxn
+             *      ServerCnxn implements Watcher
+             *
              * *********
              * ** 处理 **
              * *********
