@@ -613,14 +613,25 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
                 //zks.sessionTracker.checkSession(request.sessionId, request.getOwner());
                 // 临时节点和 sessionId 绑定的,因此可以通过 sessionId 获取其所对应的临时节点的名字
                 // 举例: create -e /e 1,当调用 quit 命令时,es 对象的集合中会有一个值为 '/e'
+                // 关闭连接需要干掉所有临时节点: 这里是获取属于此次会话的所有临时节点
                 Set<String> es = zks.getZKDatabase().getEphemerals(request.sessionId);
                 // 在执行 PrepRequestProcessor.run() 时候进行添加到 outstandingChanges 队列中
                 synchronized (zks.outstandingChanges) {
+                    /**
+                     * 对所有队列中的 ChangeRecord
+                     * 在执行 PrepRequestProcessor.run() 时候进行添加到 outstandingChanges 队列中
+                     * @see PrepRequestProcessor#run()
+                     */
                     for (ChangeRecord c : zks.outstandingChanges) {
+                        // 表示待实施请求中,已经包含删除某路径请求
                         if (c.stat == null) {
                             // Doing a delete
+                            // 将此会话下已经规划为删除的路径从这里的临时节点中去掉,避免重复删除
                             es.remove(c.path);
-                        } else if (c.stat.getEphemeralOwner() == request.sessionId) {
+                        }
+                        // 表示待实施请求中,包含某个路径属于此临时会话
+                        else if (c.stat.getEphemeralOwner() == request.sessionId) {
+                            // 将改路径加入这里的临时节点,放置漏掉属于此会话的待实施的临时节点
                             es.add(c.path);
                         }
                     }
