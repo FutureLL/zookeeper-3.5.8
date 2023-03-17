@@ -1056,7 +1056,11 @@ public class DataTree {
         // so there is no need for synchronization. The list is not
         // changed here. Only create and delete change the list which
         // are again called from FinalRequestProcessor in sequence.
-        // 移除临时节点
+        /**
+         * ******************
+         * *** 移除临时节点 ***
+         * ******************
+         */
         HashSet<String> list = ephemerals.remove(session);
         if (list != null) {
             for (String path : list) {
